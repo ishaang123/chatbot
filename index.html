@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Desktop</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0a;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Login Screen ── */
+        #login-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+        }
+
+        .login-box {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 40px;
+            width: 360px;
+            text-align: center;
+        }
+
+        .login-box h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .login-box p {
+            color: #888;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+
+        .login-box input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #0a0a0a;
+            color: #fff;
+            font-size: 16px;
+            margin-bottom: 16px;
+            outline: none;
+        }
+
+        .login-box input:focus {
+            border-color: #4a9eff;
+        }
+
+        .login-box button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #4a9eff;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .login-box button:hover {
+            background: #3a8eef;
+        }
+
+        .error-msg {
+            color: #ff4a4a;
+            font-size: 14px;
+            margin-top: 12px;
+            display: none;
+        }
+
+        /* ── Toolbar ── */
+        #toolbar {
+            display: none;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            padding: 8px 16px;
+            flex-shrink: 0;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .toolbar-left, .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff4a4a;
+        }
+
+        .status-dot.connected {
+            background: #4aff4a;
+        }
+
+        .status-text {
+            font-size: 13px;
+            color: #888;
+        }
+
+        .toolbar-btn {
+            padding: 6px 12px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #222;
+            color: #ccc;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .toolbar-btn:hover {
+            background: #333;
+            color: #fff;
+        }
+
+        .toolbar-btn.active {
+            background: #4a9eff;
+            border-color: #4a9eff;
+            color: #fff;
+        }
+
+        /* ── Screen Canvas ── */
+        #screen-container {
+            display: none;
+            flex: 1;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #screen-canvas {
+            cursor: crosshair;
+            max-width: 100%;
+            max-height: 100%;
+            image-rendering: auto;
+        }
+
+        /* ── Mobile Keyboard Button ── */
+        #mobile-keyboard-btn {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #4a9eff;
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            z-index: 100;
+        }
+
+        /* ── Mobile Detection ── */
+        @media (max-width: 768px) {
+            #mobile-keyboard-btn {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Login Screen -->
+    <div id="login-screen">
+        <div class="login-box">
+            <h1>🖥️ Remote Desktop</h1>
+            <p>Enter the password to connect</p>
+            <input type="password" id="password-input" placeholder="Password" autofocus>
+            <button onclick="connect()">Connect</button>
+            <div class="error-msg" id="error-msg"></div>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div id="toolbar">
+        <div class="toolbar-left">
+            <div class="status-dot" id="status-dot"></div>
+            <span class="status-text" id="status-text">Connecting...</span>
+        </div>
+        <div class="toolbar-right">
+            <button class="toolbar-btn active" id="btn-input" onclick="toggleInput()">
+                🖱️ Input On
+            </button>
+            <button class="toolbar-btn" onclick="toggleFullscreen()">
+                ⛶ Fullscreen
+            </button>
+            <button class="toolbar-btn" onclick="disconnect()">
+                ✕ Disconnect
+            </button>
+        </div>
+    </div>
+
+    <!-- Screen Display -->
+    <div id="screen-container">
+        <canvas id="screen-canvas"></canvas>
+    </div>
+
+    <!-- Mobile Keyboard Trigger -->
+    <button id="mobile-keyboard-btn" onclick="showMobileKeyboard()">⌨️</button>
+
+    <!-- Hidden input for mobile keyboard -->
+    <input type="text" id="mobile-input" style="position:fixed;top:-100px;opacity:0;" autocomplete="off" autocorrect="off" autocapitalize="off">
+
+    <script>
+        const canvas = document.getElementById('screen-canvas');
+        const ctx = canvas.getContext('2d');
+        let ws = null;
+        let inputEnabled = true;
+        let streamWidth = 0;
+        let streamHeight = 0;
+
+        // Key mapping: browser key names → pyautogui key names
+        const KEY_MAP = {
+            'Enter': 'enter', 'Backspace': 'backspace', 'Tab': 'tab',
+            'Escape': 'escape', 'Delete': 'delete', 'Insert': 'insert',
+            'Home': 'home', 'End': 'end', 'PageUp': 'pageup', 'PageDown': 'pagedown',
+            'ArrowUp': 'up', 'ArrowDown': 'down', 'ArrowLeft': 'left', 'ArrowRight': 'right',
+            'F1': 'f1', 'F2': 'f2', 'F3': 'f3', 'F4': 'f4', 'F5': 'f5', 'F6': 'f6',
+            'F7': 'f7', 'F8': 'f8', 'F9': 'f9', 'F10': 'f10', 'F11': 'f11', 'F12': 'f12',
+            'Control': 'ctrl', 'Alt': 'alt', 'Shift': 'shift', 'Meta': 'win',
+            ' ': 'space', 'CapsLock': 'capslock',
+        };
+
+        function connect() {
+            const password = document.getElementById('password-input').value;
+            if (!password) {
+                showError('Please enter a password');
+                return;
+            }
+
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${proto}//${location.host}/ws/viewer`;
+
+            try {
+                ws = new WebSocket(wsUrl);
+            } catch (e) {
+                showError('Failed to connect: ' + e.message);
+                return;
+            }
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ password: password }));
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'auth_ok') {
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('toolbar').style.display = 'flex';
+                    document.getElementById('screen-container').style.display = 'flex';
+                    document.getElementById('status-dot').classList.add('connected');
+                    document.getElementById('status-text').textContent = 'Connected';
+                    setupInputHandlers();
+                }
+                else if (msg.type === 'error') {
+                    showError(msg.message);
+                }
+                else if (msg.type === 'frame') {
+                    displayFrame(msg.data);
+                }
+            };
+
+            ws.onclose = () => {
+                document.getElementById('status-dot').classList.remove('connected');
+                document.getElementById('status-text').textContent = 'Disconnected';
+            };
+
+            ws.onerror = () => {
+                showError('Connection failed. Is the server running?');
+            };
+        }
+
+        function displayFrame(base64Data) {
+            const img = new Image();
+            img.onload = () => {
+                if (canvas.width !== img.width || canvas.height !== img.height) {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    streamWidth = img.width;
+                    streamHeight = img.height;
+                }
+                ctx.drawImage(img, 0, 0);
+            };
+            img.src = 'data:image/jpeg;base64,' + base64Data;
+        }
+
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: Math.round((e.clientX - rect.left) * scaleX),
+                y: Math.round((e.clientY - rect.top) * scaleY)
+            };
+        }
+
+        function setupInputHandlers() {
+            // Mouse click
+            canvas.addEventListener('click', (e) => {
+                if (!inputEnabled || !ws) return;
+                e.preventDefault();
+                const coords = getCanvasCoords(e);
+                ws.send(JSON.stringify({ type: 'click', x: coords.x, y: coords.y }));
+            });
+
+            // Right click
+            canvas.addEventListener('contextmenu', (e) => {
+                if (!inputEnabled || !ws) return;
+                e.preventDefault();
+                const coords = getCanvasCoords(e);
+                ws.send(JSON.stringify({ type: 'rightclick', x: coords.x, y: coords.y }));
+            });
+
+            // Double click
+            canvas.addEventListener('dblclick', (e) => {
+                if (!inputEnabled || !ws) return;
+                e.preventDefault();
+                const coords = getCanvasCoords(e);
+                ws.send(JSON.stringify({ type: 'doubleclick', x: coords.x, y: coords.y }));
+            });
+
+            // Scroll
+            canvas.addEventListener('wheel', (e) => {
+                if (!inputEnabled || !ws) return;
+                e.preventDefault();
+                const coords = getCanvasCoords(e);
+                const amount = e.deltaY > 0 ? -3 : 3;
+                ws.send(JSON.stringify({ type: 'scroll', x: coords.x, y: coords.y, amount: amount }));
+            }, { passive: false });
+
+            // Keyboard
+            document.addEventListener('keydown', (e) => {
+                if (!inputEnabled || !ws) return;
+                // Don't capture if typing in an input field (except mobile-input)
+                if (e.target.tagName === 'INPUT' && e.target.id !== 'mobile-input') return;
+
+                e.preventDefault();
+
+                const key = KEY_MAP[e.key] || (e.key.length === 1 ? e.key : null);
+                if (key) {
+                    ws.send(JSON.stringify({ type: 'keydown', key: key }));
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                if (!inputEnabled || !ws) return;
+                if (e.target.tagName === 'INPUT' && e.target.id !== 'mobile-input') return;
+
+                e.preventDefault();
+
+                const key = KEY_MAP[e.key] || (e.key.length === 1 ? e.key : null);
+                if (key) {
+                    ws.send(JSON.stringify({ type: 'keyup', key: key }));
+                }
+            });
+
+            // Touch support for mobile
+            let touchStartTime = 0;
+            canvas.addEventListener('touchstart', (e) => {
+                if (!inputEnabled || !ws) return;
+                e.preventDefault();
+                touchStartTime = Date.now();
+            }, { passive: false });
+
+            canvas.addEventListener('touchend', (e) => {
+                if (!inputEnabled || !ws) return;
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const x = Math.round((touch.clientX - rect.left) * scaleX);
+                const y = Math.round((touch.clientY - rect.top) * scaleY);
+
+                const holdTime = Date.now() - touchStartTime;
+                if (holdTime > 500) {
+                    ws.send(JSON.stringify({ type: 'rightclick', x, y }));
+                } else {
+                    ws.send(JSON.stringify({ type: 'click', x, y }));
+                }
+            }, { passive: false });
+
+            // Mobile input handler
+            document.getElementById('mobile-input').addEventListener('input', (e) => {
+                if (!inputEnabled || !ws) return;
+                const char = e.data;
+                if (char) {
+                    ws.send(JSON.stringify({ type: 'key', key: char }));
+                }
+                e.target.value = '';
+            });
+        }
+
+        function toggleInput() {
+            inputEnabled = !inputEnabled;
+            const btn = document.getElementById('btn-input');
+            btn.textContent = inputEnabled ? '🖱️ Input On' : '🖱️ Input Off';
+            btn.classList.toggle('active', inputEnabled);
+            canvas.style.cursor = inputEnabled ? 'crosshair' : 'default';
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function disconnect() {
+            if (ws) ws.close();
+            document.getElementById('login-screen').style.display = 'flex';
+            document.getElementById('toolbar').style.display = 'none';
+            document.getElementById('screen-container').style.display = 'none';
+        }
+
+        function showMobileKeyboard() {
+            document.getElementById('mobile-input').focus();
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error-msg');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        // Enter key to connect
+        document.getElementById('password-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') connect();
+        });
+    </script>
+</body>
+</html>
