@@ -49,6 +49,7 @@ def index():
             'noplaylist': True,
             # Uses the cookie file you uploaded to GitHub
             'cookiefile': 'cookies.txt', 
+            'compat_opts': {'no-youtube-prefer-oauth2'}
         }
         
         try:
