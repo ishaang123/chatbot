@@ -1,4 +1,4 @@
 flask
 yt-dlp
-yt-dlp-get-pot
+yt-dlp-youtube-oauth2
 gunicorn
