@@ -7,7 +7,6 @@ import time
 
 app = Flask(__name__)
 
-# Storage setup
 DOWNLOAD_FOLDER = 'downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
@@ -22,28 +21,23 @@ HTML_TEMPLATE = """
     <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@700&family=Outfit:wght@300;600;900&display=swap" rel="stylesheet">
     <style>
         :root { --primary: #00f2ff; --bg: #020202; --card: rgba(12, 12, 12, 0.98); }
-        
         * { box-sizing: border-box; transition: all 0.25s ease-out; }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
-
         body { 
             font-family: 'Outfit', sans-serif; background: var(--bg); color: white;
             margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
             min-height: 100vh; overflow-y: auto;
             background-image: radial-gradient(circle at 50% 10%, #001a1a 0%, #020202 100%);
         }
-
         .container { 
             width: 100%; max-width: 460px; margin: 40px auto; padding: 2.5rem; 
             background: var(--card); border-radius: 3rem; 
             border: 1px solid rgba(255, 255, 255, 0.03); text-align: center; 
             backdrop-filter: blur(40px); box-shadow: 0 40px 120px rgba(0,0,0,0.9);
         }
-
         h1 { font-family: 'Syncopate', sans-serif; font-size: 1.8rem; margin: 0; letter-spacing: -3px; }
         .neon { color: var(--primary); text-shadow: 0 0 20px rgba(0,242,255,0.4); }
-
         .selector { 
             display: flex; background: #000; padding: 6px; border-radius: 20px; 
             margin: 2rem 0; border: 1px solid #1a1a1a;
@@ -54,23 +48,18 @@ HTML_TEMPLATE = """
             font-weight: 900; font-size: 0.75rem; text-transform: uppercase;
         }
         .s-btn.active { background: #fff; color: #000; }
-
         input { 
             width: 100%; background: #080808; border: 1px solid #222; padding: 1.2rem; 
             border-radius: 20px; color: white; outline: none; font-size: 1rem; margin-bottom: 1rem;
         }
-        input:focus { border-color: var(--primary); box-shadow: 0 0 20px rgba(0,242,255,0.1); }
-
         .go-btn { 
             width: 100%; padding: 1.2rem; background: var(--primary); color: #000; 
             border: none; border-radius: 20px; font-weight: 900; cursor: pointer;
             font-size: 1rem; letter-spacing: 1px; text-transform: uppercase;
         }
-        .go-btn:hover { transform: scale(1.02); filter: brightness(1.1); }
-
+        .go-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         #preview-area { display: none; margin-top: 2.5rem; animation: slideUp 0.5s cubic-bezier(0,1,0,1); }
         .p-thumb { width: 100%; border-radius: 25px; border: 1px solid #333; margin-bottom: 1rem; }
-        
         .pulse { width: 10px; height: 10px; background: var(--primary); border-radius: 50%; display: inline-block; margin-right: 8px; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
@@ -91,13 +80,13 @@ HTML_TEMPLATE = """
 
         <div id="loader" style="display: none; margin-top: 20px;">
             <span class="pulse"></span>
-            <span style="font-size: 0.7rem; letter-spacing: 2px; color: var(--primary); font-weight: bold;">BYPASSING...</span>
+            <span id="load-text" style="font-size: 0.7rem; letter-spacing: 2px; color: var(--primary); font-weight: bold;">INITIALIZING PREVIEW...</span>
         </div>
 
         <div id="preview-area">
             <img id="res-img" class="p-thumb" src="">
-            <div id="res-title" style="font-size: 0.9rem; font-weight: 600; margin-bottom: 20px; opacity: 0.8;"></div>
-            <a id="res-dl" style="text-decoration: none;"><button class="go-btn" style="background: #fff;">Download File</button></a>
+            <div id="res-title" style="font-size: 0.9rem; font-weight: 600; margin-bottom: 20px; opacity: 0.8;">Detecting Source...</div>
+            <a id="res-dl" style="text-decoration: none; display: none;"><button class="go-btn" style="background: #fff;">Download File</button></a>
         </div>
     </div>
 
@@ -113,9 +102,17 @@ HTML_TEMPLATE = """
             const url = document.getElementById('url-box').value;
             if(!url) return;
             
+            // UI RESET & SHOW SCREENSHOT IMMEDIATELY
             document.getElementById('loader').style.display = 'block';
+            document.getElementById('load-text').innerText = "BYPASSING SERVER...";
             document.getElementById('main-action').disabled = true;
-            document.getElementById('preview-area').style.display = 'none';
+            
+            // Set the screenshot as the "loading" image
+            const previewImg = document.getElementById('res-img');
+            previewImg.src = `https://image.thum.io/get/maxAge/12/width/700/${url}`;
+            document.getElementById('res-title').innerText = "Connecting to source...";
+            document.getElementById('res-dl').style.display = 'none';
+            document.getElementById('preview-area').style.display = 'block';
 
             try {
                 const res = await fetch('/extract', {
@@ -126,13 +123,14 @@ HTML_TEMPLATE = """
                 const data = await res.json();
                 
                 if(data.success) {
-                    document.getElementById('res-img').src = data.thumbnail;
+                    // Update to the actual media thumbnail and show the download button
+                    previewImg.src = data.thumbnail;
                     document.getElementById('res-title').innerText = data.title;
                     document.getElementById('res-dl').href = `/get-file?file=${data.filename}`;
-                    document.getElementById('preview-area').style.display = 'block';
-                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                    document.getElementById('res-dl').style.display = 'block';
                 } else {
                     alert("Error: " + data.error);
+                    document.getElementById('preview-area').style.display = 'none';
                 }
             } catch(e) {
                 alert("Server busy.");
@@ -147,7 +145,7 @@ HTML_TEMPLATE = """
 """
 
 def auto_delete(path):
-    time.sleep(300) # 5-minute cleanup
+    time.sleep(300) 
     if os.path.exists(path):
         os.remove(path)
 
@@ -161,10 +159,9 @@ def extract():
     url = data.get('url').split('?')[0]
     fmt = data.get('format', 'mp4')
     
-    # Strictly block SoundCloud and YouTube
     forbidden = ["soundcloud.com", "snd.sc", "youtube.com", "youtu.be", "music.youtube"]
     if any(x in url.lower() for x in forbidden):
-        return jsonify({'success': False, 'error': 'Platform restricted on this server.'})
+        return jsonify({'success': False, 'error': 'Platform restricted.'})
 
     fid = str(uuid.uuid4())[:8]
     ydl_opts = {
@@ -172,7 +169,6 @@ def extract():
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
 
     if fmt == 'mp3':
@@ -187,9 +183,7 @@ def extract():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             fname = ydl.prepare_filename(info)
-            
-            if fmt == 'mp3':
-                fname = os.path.splitext(fname)[0] + ".mp3"
+            if fmt == 'mp3': fname = os.path.splitext(fname)[0] + ".mp3"
 
             threading.Thread(target=auto_delete, args=(fname,)).start()
 
@@ -199,8 +193,8 @@ def extract():
                 'thumbnail': info.get('thumbnail') or 'https://via.placeholder.com/600x338/111/00f2ff?text=Nexus+V7',
                 'filename': os.path.basename(fname)
             })
-    except Exception as e:
-        return jsonify({'success': False, 'error': "Link incompatible or site protected."})
+    except Exception:
+        return jsonify({'success': False, 'error': "Link incompatible."})
 
 @app.route('/get-file')
 def get_file():
