@@ -203,14 +203,20 @@ def extract():
     fmt = data.get('format', 'mp4')
     
     if "youtube" in url.lower() or "youtu.be" in url.lower():
-        return jsonify({'success': False, 'error': 'YouTube usage is restricted on this tier.'})
+        return jsonify({'success': False, 'error': 'YouTube restricted.'})
 
     fid = str(uuid.uuid4())[:8]
     ydl_opts = {
         'outtmpl': f'{DOWNLOAD_FOLDER}/{fid}.%(ext)s',
         'quiet': True,
         'noplaylist': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        # THE SOUNDCLOUD SECRET SAUCE:
+        'extractor_args': {
+            'soundcloud': {
+                'formats': ['http_mp3', 'http_aac', 'http_opus']
+            }
+        },
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
 
     if fmt == 'mp3':
@@ -223,16 +229,21 @@ def extract():
             }],
         })
     else:
-        # Standard video formats
         ydl_opts.update({'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'})
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Soundcloud fix: try to get info first to avoid HLS errors
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             
             if fmt == 'mp3':
-                filename = os.path.splitext(filename)[0] + ".mp3"
+                # Force rename to .mp3 because yt-dlp might leave it as .webm or .m4a before conversion
+                base_path = os.path.splitext(filename)[0]
+                if os.path.exists(base_path + ".mp3"):
+                    filename = base_path + ".mp3"
+                else:
+                    filename = base_path + ".mp3" # Post-processor will create this
 
             threading.Thread(target=delete_later, args=(filename,)).start()
 
@@ -243,7 +254,8 @@ def extract():
                 'filename': os.path.basename(filename)
             })
     except Exception as e:
-        return jsonify({'success': False, 'error': "Site not supported or link broken."})
+        print(f"DEBUG ERROR: {str(e)}") # Check your Render logs for this!
+        return jsonify({'success': False, 'error': "SoundCloud Link Protected or Rate Limited."})
 
 @app.route('/get-file')
 def get_file():
