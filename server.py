@@ -8,24 +8,24 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>YT Downloader - OAuth2</title>
+    <title>YT Downloader</title>
     <style>
         body { font-family: sans-serif; display: flex; justify-content: center; margin-top: 50px; background-color: #f4f4f9; }
         .container { width: 450px; text-align: center; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         input[type="text"] { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; }
         button { padding: 12px 24px; cursor: pointer; background: #ff0000; color: white; border: none; border-radius: 5px; font-weight: bold; }
-        .status { margin-top: 20px; color: #555; white-space: pre-wrap; font-size: 14px; text-align: left; background: #eee; padding: 10px; border-radius: 5px; }
+        .status { margin-top: 20px; color: #555; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>YouTube Downloader (OAuth2)</h2>
+        <h2>YouTube Downloader (Stable)</h2>
         <form method="POST">
             <input type="text" name="url" placeholder="Paste YouTube URL here" required>
-            <button type="submit">Download</button>
+            <button type="submit">Download to Computer</button>
         </form>
         {% if message %}
-            <div class="status"><strong>Status:</strong><br>{{ message }}</div>
+            <p class="status">{{ message }}</p>
         {% endif %}
     </div>
 </body>
@@ -42,24 +42,19 @@ def index():
             'format': 'best',
             'outtmpl': '%(title)s.%(ext)s',
             'noplaylist': True,
-            # Acts like a Smart TV to trigger the device code login
-            'username': 'oauth2',
-            'password': '', 
+            # This is the magic line that uses your cookies to bypass the bot check
+            'cookiefile': 'cookies.txt', 
         }
         
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 filename = ydl.prepare_filename(info)
-            return send_file(filename, as_attachment=True)
             
+            return send_file(filename, as_attachment=True)
+
         except Exception as e:
-            error_str = str(e)
-            # Catch the specific OAuth2 instruction and display it to the user
-            if "google.com/device" in error_str:
-                message = f"ACTION REQUIRED: {error_str}"
-            else:
-                message = f"Error: {error_str}"
+            message = f"Error: {str(e)}"
             
     return render_template_string(HTML_TEMPLATE, message=message)
 
