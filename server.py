@@ -4,11 +4,10 @@ import os
 import uuid
 import threading
 import time
-import subprocess
 
 app = Flask(__name__)
 
-# Config
+# Storage Config
 DOWNLOAD_FOLDER = 'downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
@@ -19,126 +18,158 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nexus Ultra | Media Fetcher</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <title>Nexus Ultra | Elite Media Fetcher</title>
+    <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@700&family=Outfit:wght@300;600;900&display=swap" rel="stylesheet">
     <style>
-        :root { --primary: #00f2ff; --bg: #050505; --card: rgba(20, 20, 20, 0.85); }
+        :root { --primary: #00f2ff; --neon-purple: #bc13fe; --bg: #020202; }
+        
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
+
         body { 
-            font-family: 'Inter', sans-serif; 
-            background: radial-gradient(circle at top right, #0a192f, #050505);
-            color: white; display: flex; justify-content: center; align-items: center; 
-            min-height: 100vh; margin: 0; overflow: hidden;
-        }
-        
-        .container { 
-            width: 90%; max-width: 440px; padding: 2rem; 
-            background: var(--card); border-radius: 2rem; 
-            border: 1px solid rgba(0, 242, 255, 0.15); text-align: center; 
-            backdrop-filter: blur(15px); box-shadow: 0 25px 50px rgba(0,0,0,0.6);
-            position: relative; z-index: 2;
+            font-family: 'Outfit', sans-serif; background: var(--bg); color: white;
+            margin: 0; display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; overflow-y: auto;
+            background-image: 
+                linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
         }
 
-        .type-selector { display: flex; gap: 8px; margin-bottom: 1.5rem; background: #000; padding: 5px; border-radius: 12px; }
-        .t-btn { 
-            flex: 1; padding: 10px; border-radius: 8px; border: none;
-            background: transparent; cursor: pointer; color: #666;
-            transition: 0.3s; font-weight: 700; font-size: 0.8rem;
-        }
-        .t-btn.active { background: var(--primary); color: #000; box-shadow: 0 0 15px rgba(0,242,255,0.3); }
+        .hero { margin-top: 50px; text-align: center; padding: 20px; }
+        h1 { font-family: 'Syncopate', sans-serif; font-size: 2.2rem; letter-spacing: -3px; margin: 0; }
+        .glow { color: var(--primary); text-shadow: 0 0 20px rgba(0,242,255,0.6); }
 
-        .input-group { 
-            background: rgba(255,255,255,0.05); border: 1px solid #333; 
-            border-radius: 12px; display: flex; margin-bottom: 1rem;
+        .app-card { 
+            width: 92%; max-width: 460px; margin: 20px 0; padding: 2rem; 
+            background: rgba(15, 15, 15, 0.7); border-radius: 2.5rem; 
+            border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(40px);
+            box-shadow: 0 40px 100px rgba(0,0,0,0.9);
         }
-        input { flex: 1; background: transparent; border: none; padding: 1rem; color: white; outline: none; }
-        
-        #fetch-btn { 
-            width: 100%; padding: 1rem; background: var(--primary); color: #000; 
-            border: none; border-radius: 12px; font-weight: 900; cursor: pointer;
-            transition: 0.3s; text-transform: uppercase;
-        }
-        #fetch-btn:hover { filter: brightness(1.2); transform: translateY(-2px); }
 
-        #preview { display: none; margin-top: 1.5rem; animation: slideUp 0.5s ease; }
-        .thumb-cont { width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #333; position: relative; }
-        .thumb-img { width: 100%; display: block; }
+        .mode-toggle { 
+            display: flex; gap: 8px; background: #000; padding: 6px; 
+            border-radius: 20px; margin-bottom: 1.5rem; border: 1px solid #222;
+        }
+        .m-btn { 
+            flex: 1; padding: 12px; border-radius: 15px; border: none;
+            background: transparent; cursor: pointer; color: #555;
+            font-weight: 900; font-size: 0.75rem; transition: 0.4s;
+            text-transform: uppercase;
+        }
+        .m-btn.active { background: linear-gradient(135deg, var(--primary), var(--neon-purple)); color: white; }
+
+        .input-box { 
+            background: rgba(255,255,255,0.03); border: 1px solid #333; 
+            border-radius: 20px; display: flex; align-items: center; padding: 5px 15px;
+            margin-bottom: 1.5rem; transition: 0.3s;
+        }
+        .input-box:focus-within { border-color: var(--primary); box-shadow: 0 0 15px rgba(0,242,255,0.2); }
+        input { flex: 1; background: transparent; border: none; padding: 1rem; color: white; outline: none; font-size: 1rem; }
+
+        .action-btn { 
+            width: 100%; padding: 1.2rem; background: #fff; color: #000; 
+            border: none; border-radius: 20px; font-weight: 900; cursor: pointer;
+            font-size: 1rem; transition: 0.3s; box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        .action-btn:active { transform: scale(0.96); }
+        .action-btn:hover { background: var(--primary); }
+
+        /* Results Section */
+        #result { display: none; margin-top: 2rem; animation: fadeInUp 0.5s ease forwards; }
+        .preview-media { width: 100%; border-radius: 20px; margin-bottom: 1rem; border: 1px solid #333; }
         
-        #overlay { 
-            position: fixed; inset: 0; background: rgba(0,0,0,0.85); 
+        .badge { 
+            display: inline-block; padding: 5px 12px; border-radius: 10px; 
+            background: rgba(0,242,255,0.1); color: var(--primary); 
+            font-size: 0.7rem; font-weight: 900; margin-bottom: 10px;
+        }
+
+        #loader { 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9); 
             display: none; flex-direction: column; justify-content: center; 
-            align-items: center; z-index: 100; backdrop-filter: blur(8px); 
+            align-items: center; z-index: 1000; backdrop-filter: blur(10px);
         }
-        .spinner { 
-            width: 50px; height: 50px; border: 3px solid rgba(0,242,255,0.1); 
-            border-top: 3px solid var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; 
-        }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .scanline { width: 100px; height: 2px; background: var(--primary); box-shadow: 0 0 15px var(--primary); animation: scan 1s infinite alternate; }
+        
+        @keyframes scan { from { opacity: 0.2; transform: scaleX(0.5); } to { opacity: 1; transform: scaleX(1.5); } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
-    <div id="overlay">
-        <div class="spinner"></div>
-        <p style="margin-top: 20px; color: var(--primary); font-weight: bold; letter-spacing: 2px;">FETCHING MEDIA...</p>
+    <div id="loader">
+        <div class="scanline"></div>
+        <p style="color: var(--primary); font-family: 'Syncopate'; font-size: 0.6rem; margin-top: 20px;">ENCRYPTING STREAM</p>
     </div>
 
-    <div class="container">
-        <h1 style="margin: 0 0 1.5rem 0; letter-spacing: -2px;">NEXUS<span style="color:var(--primary)">ULTRA</span></h1>
-        
-        <div class="type-selector">
-            <button id="mp4-btn" class="t-btn active" onclick="setFormat('mp4')">MP4 VIDEO</button>
-            <button id="mp3-btn" class="t-btn" onclick="setFormat('mp3')">MP3 AUDIO</button>
+    <div class="hero">
+        <h1>NEXUS<span class="glow">ULTRA</span></h1>
+        <p style="font-size: 0.8rem; opacity: 0.5; letter-spacing: 2px;">ELITE MEDIA FETCH v4.0</p>
+    </div>
+
+    <div class="app-card">
+        <div class="mode-toggle">
+            <button id="mp4-btn" class="m-btn active" onclick="setFmt('mp4')">Video</button>
+            <button id="mp3-btn" class="m-btn" onclick="setFmt('mp3')">Audio</button>
         </div>
 
-        <div class="input-group">
-            <input type="text" id="url" placeholder="Paste link here..." autocomplete="off">
+        <div class="input-box">
+            <input type="text" id="target-url" placeholder="Paste link here..." onpaste="setTimeout(process, 100)">
         </div>
-        
-        <button id="fetch-btn" onclick="startProcess()">SNATCH CONTENT</button>
 
-        <div id="preview">
-            <div class="thumb-cont">
-                <img id="p-img" class="thumb-img" src="">
-            </div>
-            <p id="p-title" style="font-size: 0.85rem; margin: 12px 0; color: #ccc;"></p>
-            <a id="p-link" style="text-decoration: none;"><button id="fetch-btn" style="background: #fff; font-size: 0.7rem;">DOWNLOAD NOW</button></a>
+        <button class="action-btn" onclick="process()">FETCH MEDIA</button>
+
+        <div id="result">
+            <div class="badge" id="type-badge">MP4</div>
+            <img id="p-img" class="preview-media" src="">
+            <h3 id="p-title" style="font-size: 1rem; margin: 0 0 15px 0;"></h3>
+            
+            <a id="p-dl" style="text-decoration: none;">
+                <button class="action-btn" style="background: var(--primary);">DOWNLOAD NOW</button>
+            </a>
         </div>
     </div>
+
+    <p style="margin: 20px; font-size: 0.7rem; opacity: 0.3;">Supports: TikTok, SoundCloud, Vimeo, IG, Streamable & More</p>
 
     <script>
-        let format = 'mp4';
-        function setFormat(f) {
-            format = f;
-            document.getElementById('mp4-btn').className = f === 'mp4' ? 't-btn active' : 't-btn';
-            document.getElementById('mp3-btn').className = f === 'mp3' ? 't-btn active' : 't-btn';
+        let selectedFmt = 'mp4';
+        function setFmt(f) {
+            selectedFmt = f;
+            document.getElementById('mp4-btn').className = f === 'mp4' ? 'm-btn active' : 'm-btn';
+            document.getElementById('mp3-btn').className = f === 'mp3' ? 'm-btn active' : 'm-btn';
+            document.getElementById('type-badge').innerText = f.toUpperCase();
         }
 
-        async function startProcess() {
-            const url = document.getElementById('url').value;
-            if(!url) return alert("Paste a link!");
+        async function process() {
+            const url = document.getElementById('target-url').value;
+            if(!url) return;
 
-            document.getElementById('overlay').style.display = 'flex';
-            
+            document.getElementById('loader').style.display = 'flex';
+            document.getElementById('result').style.display = 'none';
+
             try {
-                const res = await fetch('/extract', {
+                const response = await fetch('/extract', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ url, format })
+                    body: JSON.stringify({ url, format: selectedFmt })
                 });
-                const data = await res.json();
+                const data = await response.json();
                 
                 if(data.success) {
                     document.getElementById('p-img').src = data.thumbnail;
                     document.getElementById('p-title').innerText = data.title;
-                    document.getElementById('p-link').href = `/get-file?file=${data.filename}`;
-                    document.getElementById('preview').style.display = 'block';
+                    document.getElementById('p-dl').href = `/get-file?file=${data.filename}`;
+                    document.getElementById('result').style.display = 'block';
+                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
                 } else {
                     alert(data.error);
                 }
             } catch(e) {
-                alert("Server Error");
+                alert("Server Timeout");
             } finally {
-                document.getElementById('overlay').style.display = 'none';
+                document.getElementById('loader').style.display = 'none';
             }
         }
     </script>
@@ -146,30 +177,10 @@ HTML_TEMPLATE = """
 </html>
 """
 
-def cleanup(path, delay=300):
-    time.sleep(delay)
+def delete_file(path):
+    time.sleep(300)
     if os.path.exists(path):
         os.remove(path)
-    # Also remove generated thumbnail if it exists
-    thumb_path = path + ".jpg"
-    if os.path.exists(thumb_path):
-        os.remove(thumb_path)
-
-def get_random_frame(video_path):
-    """Uses FFmpeg to grab a frame at 00:00:02 and save as JPG."""
-    thumb_path = video_path + ".jpg"
-    try:
-        # Grabs a frame at 2 seconds (or 0 if it's super short)
-        cmd = [
-            'ffmpeg', '-y', '-i', video_path, '-ss', '00:00:02', 
-            '-vframes', '1', '-q:v', '2', thumb_path
-        ]
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if os.path.exists(thumb_path):
-            return thumb_path
-    except:
-        pass
-    return None
 
 @app.route('/')
 def home():
@@ -178,19 +189,22 @@ def home():
 @app.route('/extract', methods=['POST'])
 def extract():
     data = request.json
-    url = data.get('url')
+    url = data.get('url').split('?')[0] # Auto-strip tracking parameters
     fmt = data.get('format', 'mp4')
     
-    if "youtube" in url.lower() or "youtu.be" in url.lower():
-        return jsonify({'success': False, 'error': 'YouTube usage blocked.'})
+    if any(x in url.lower() for x in ["youtube", "youtu.be"]):
+        return jsonify({'success': False, 'error': 'YouTube is restricted.'})
 
     fid = str(uuid.uuid4())[:8]
+    
+    # Elite-Level Options
     ydl_opts = {
         'outtmpl': f'{DOWNLOAD_FOLDER}/{fid}.%(ext)s',
         'quiet': True,
         'noplaylist': True,
+        'no_warnings': True,
+        'user_agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'extractor_args': {'soundcloud': {'formats': ['http_mp3']}},
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
 
     if fmt == 'mp3':
@@ -199,45 +213,27 @@ def extract():
             'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '192'}]
         })
     else:
-        ydl_opts.update({'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'})
+        # Tries standard MP4 first, falls back to best available
+        ydl_opts.update({'format': 'best[ext=mp4]/best'})
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            raw_filename = ydl.prepare_filename(info)
+            filename = ydl.prepare_filename(info)
             
-            # Final Filename adjustment
             if fmt == 'mp3':
-                filename = os.path.splitext(raw_filename)[0] + ".mp3"
-            else:
-                filename = raw_filename
+                filename = os.path.splitext(filename)[0] + ".mp3"
 
-            # THUMBNAIL LOGIC
-            # If API gives no thumbnail, or we are in MP4 mode, grab a random frame
-            thumbnail_url = info.get('thumbnail')
-            
-            if fmt == 'mp4' and os.path.exists(filename):
-                # Always try to grab a high-quality frame for videos
-                frame_path = get_random_frame(filename)
-                if frame_path:
-                    # Serve the local frame instead of a placeholder
-                    # (Note: In a full app, you'd serve this via a route, 
-                    # but for now, we'll use the API thumb or placeholder)
-                    pass 
-
-            if not thumbnail_url:
-                thumbnail_url = "https://via.placeholder.com/600x338/111/00f2ff?text=Nexus+Ultra"
-
-            threading.Thread(target=cleanup, args=(filename,)).start()
+            threading.Thread(target=delete_file, args=(filename,)).start()
 
             return jsonify({
                 'success': True,
-                'title': info.get('title', 'Media File'),
-                'thumbnail': thumbnail_url,
+                'title': info.get('title', 'Untitled Media'),
+                'thumbnail': info.get('thumbnail') or 'https://via.placeholder.com/600x400/111/00f2ff?text=PREVIEW+READY',
                 'filename': os.path.basename(filename)
             })
     except Exception as e:
-        return jsonify({'success': False, 'error': "Link protected or invalid."})
+        return jsonify({'success': False, 'error': "Link incompatible or provider blocked."})
 
 @app.route('/get-file')
 def get_file():
@@ -245,7 +241,7 @@ def get_file():
     fpath = os.path.join(DOWNLOAD_FOLDER, os.path.basename(fname))
     if os.path.exists(fpath):
         return send_file(fpath, as_attachment=True)
-    return "File Expired", 404
+    return "Error: File expired.", 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
