@@ -90,56 +90,77 @@ HTML_TEMPLATE = """
         </div>
     </div>
 
-    <script>
-        let mode = 'mp4';
-        function setMode(m) {
-            mode = m;
-            document.getElementById('mode-mp4').className = m === 'mp4' ? 's-btn active' : 's-btn';
-            document.getElementById('mode-mp3').className = m === 'mp3' ? 's-btn active' : 's-btn';
-        }
+   <script>
+    let mode = 'mp4';
+    
+    function setMode(m) {
+        mode = m;
+        document.getElementById('mode-mp4').className = m === 'mp4' ? 's-btn active' : 's-btn';
+        document.getElementById('mode-mp3').className = m === 'mp3' ? 's-btn active' : 's-btn';
+    }
 
-        async function fetchContent() {
-            const url = document.getElementById('url-box').value;
-            if(!url) return;
-            
-            // UI RESET & SHOW SCREENSHOT IMMEDIATELY
-            document.getElementById('loader').style.display = 'block';
-            document.getElementById('load-text').innerText = "BYPASSING SERVER...";
-            document.getElementById('main-action').disabled = true;
-            
-            // Set the screenshot as the "loading" image
-            const previewImg = document.getElementById('res-img');
-            previewImg.src = `https://image.thum.io/get/maxAge/12/width/700/${url}`;
-            document.getElementById('res-title').innerText = "Connecting to source...";
-            document.getElementById('res-dl').style.display = 'none';
-            document.getElementById('preview-area').style.display = 'block';
+    // Artificial delay helper
+    const sleep = ms => new Promise(res => setTimeout(res, ms));
 
-            try {
-                const res = await fetch('/extract', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ url, format: mode })
-                });
-                const data = await res.json();
+    async function fetchContent() {
+        const urlBox = document.getElementById('url-box');
+        const url = urlBox.value.trim();
+        if(!url) return;
+
+        // --- 1. INSTANT SHOW (No waiting) ---
+        const previewArea = document.getElementById('preview-area');
+        const previewImg = document.getElementById('res-img');
+        const resTitle = document.getElementById('res-title');
+        const dlBtn = document.getElementById('res-dl');
+        const mainBtn = document.getElementById('main-action');
+        const loader = document.getElementById('loader');
+
+        // Immediate visual feedback
+        mainBtn.disabled = true;
+        loader.style.display = 'block';
+        previewArea.style.display = 'block'; 
+        dlBtn.style.display = 'none';
+        
+        // Show the screenshot immediately
+        previewImg.src = `https://image.thum.io/get/maxAge/1/width/700/crop/600/${url}`;
+        resTitle.innerText = "INITIALIZING ELITE BYPASS...";
+
+        try {
+            // --- 2. ARTIFICIAL DELAY (Makes it feel like it's working hard) ---
+            await sleep(1500); 
+            document.getElementById('load-text').innerText = "PENETRATING SERVERS...";
+            
+            // --- 3. ACTUAL BACKEND CALL ---
+            const res = await fetch('/extract', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ url, format: mode })
+            });
+            
+            const data = await res.json();
+            
+            if(data.success) {
+                // Short extra delay for the "reveal" effect
+                await sleep(1000);
                 
-                if(data.success) {
-                    // Update to the actual media thumbnail and show the download button
-                    previewImg.src = data.thumbnail;
-                    document.getElementById('res-title').innerText = data.title;
-                    document.getElementById('res-dl').href = `/get-file?file=${data.filename}`;
-                    document.getElementById('res-dl').style.display = 'block';
-                } else {
-                    alert("Error: " + data.error);
-                    document.getElementById('preview-area').style.display = 'none';
-                }
-            } catch(e) {
-                alert("Server busy.");
-            } finally {
-                document.getElementById('loader').style.display = 'none';
-                document.getElementById('main-action').disabled = false;
+                // Swap to actual media thumbnail
+                previewImg.src = data.thumbnail;
+                resTitle.innerText = data.title;
+                dlBtn.href = `/get-file?file=${data.filename}`;
+                dlBtn.style.display = 'block';
+            } else {
+                alert("Error: " + data.error);
+                previewArea.style.display = 'none';
             }
+        } catch(e) {
+            alert("Nexus Server Busy. Try again.");
+            previewArea.style.display = 'none';
+        } finally {
+            loader.style.display = 'none';
+            mainBtn.disabled = false;
         }
-    </script>
+    }
+</script>
 </body>
 </html>
 """
