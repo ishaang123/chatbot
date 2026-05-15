@@ -69,7 +69,6 @@ HTML_TEMPLATE = """
         .go-btn:hover { transform: scale(1.02); filter: brightness(1.1); }
         .go-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* PREVIEW GRID STYLES */
         #preview-area { display: none; margin-top: 2.5rem; width: 100%; animation: slideUp 0.5s ease; }
         
         .preview-grid {
@@ -88,7 +87,9 @@ HTML_TEMPLATE = """
 
         .p-thumb { 
             width: 100%; border-radius: 15px; border: 1px solid #333; 
-            background: #000; object-fit: cover; aspect-ratio: 16/9;
+            background: #000; 
+            object-fit: contain; /* Changed from cover to show full image */
+            max-height: 450px;    /* Prevents vertical overflow */
         }
         
         #loader { margin-top: 20px; }
@@ -157,18 +158,16 @@ HTML_TEMPLATE = """
             const mediaCard = document.getElementById('media-card');
             const siteImg = document.getElementById('res-img-site');
 
-            // --- INSTANT ACTION ---
             mainBtn.disabled = true;
             loader.style.display = 'block';
             loadText.innerText = "CAPTURING SITE FEED...";
             
-            // Show site screenshot immediately
-            siteImg.src = `https://image.thum.io/get/maxAge/1/width/700/crop/600/${url}`;
+            // REMOVED /crop/ parameter to ensure full image capture
+            siteImg.src = `https://image.thum.io/get/maxAge/1/width/800/${url}`;
             previewArea.style.display = 'block';
             mediaCard.style.display = 'none';
 
             try {
-                // ARTIFICIAL DELAY for "Bypass" feel
                 await sleep(1500);
                 loadText.innerText = "BYPASSING PROTOCOLS...";
                 
@@ -180,7 +179,7 @@ HTML_TEMPLATE = """
                 const data = await res.json();
                 
                 if(data.success) {
-                    await sleep(1000); // Final polish delay
+                    await sleep(1000);
                     document.getElementById('res-img-media').src = data.thumbnail;
                     document.getElementById('res-title').innerText = data.title;
                     document.getElementById('res-dl').href = `/get-file?file=${data.filename}`;
@@ -261,7 +260,7 @@ def get_file():
     fpath = os.path.join(DOWNLOAD_FOLDER, os.path.basename(fname))
     if os.path.exists(fpath):
         return send_file(fpath, as_attachment=True)
-    return "Expired", 404
+    return "Expired", 404 
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
