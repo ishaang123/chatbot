@@ -170,7 +170,6 @@ HTML_TEMPLATE = """
             mediaCard.style.display = 'none';
 
             try {
-                // Initialize background process via the path parameter endpoint
                 const initRes = await fetch(`/get-video/${encodeURIComponent(url)}?format=${mode}`);
                 const initData = await initRes.json();
                 
@@ -184,7 +183,6 @@ HTML_TEMPLATE = """
                 const jobId = initData.job_id;
                 let startTime = Date.now();
                 
-                // Live tracking loop
                 const pollInterval = setInterval(async () => {
                     let elapsed = Math.floor((Date.now() - startTime) / 1000);
                     let mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
@@ -236,7 +234,6 @@ def auto_delete(path):
         os.remove(path)
 
 def background_downloader(job_id, url, fmt, forbidden_platforms):
-    """Executes long-running extraction scripts using isolated threads."""
     if any(x in url.lower() for x in forbidden_platforms):
         TRACKER[job_id] = {'status': 'failed', 'error': 'Platform restricted.'}
         return
@@ -247,14 +244,13 @@ def background_downloader(job_id, url, fmt, forbidden_platforms):
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         
-        # --- FIXED BOUNCER MASK ---
-        # Spoofs Chrome client details to slip past Dailymotion's Cloudflare wall
-        'extractor_args': {
-            'dailymotion': {
-                'impersonate': 'chrome',
-            }
+        # --- TOP LEVEL IMPERSONATION OVERRIDE ---
+        'impersonate': 'chrome',
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
         }
     }
 
@@ -274,10 +270,8 @@ def background_downloader(job_id, url, fmt, forbidden_platforms):
             fname = ydl.prepare_filename(info)
             if fmt == 'mp3': fname = os.path.splitext(fname)[0] + ".mp3"
 
-            # Fire off automated deletion thread
             threading.Thread(target=auto_delete, args=(fname,)).start()
 
-            # Pass payload results back into memory monitoring tracking hub
             TRACKER[job_id] = {
                 'status': 'completed',
                 'title': info.get('title', 'Media File'),
@@ -293,22 +287,18 @@ def home():
 
 @app.route('/get-video/<path:target_url>', methods=['GET'])
 def get_video(target_url):
-    """Sets up an isolated job token and fires up a background scraper worker."""
     url = target_url.split('?')[0]
     fmt = request.args.get('format', 'mp4')
-    
     forbidden = ["soundcloud.com", "snd.sc", "youtube.com", "youtu.be", "music.youtube"]
     
     job_id = str(uuid.uuid4())[:12]
     TRACKER[job_id] = {'status': 'processing'}
     
     threading.Thread(target=background_downloader, args=(job_id, url, fmt, forbidden)).start()
-    
     return jsonify({'success': True, 'job_id': job_id})
 
 @app.route('/check-status/<job_id>', methods=['GET'])
 def check_status(job_id):
-    """Provides instant JSON statuses back to the front-end interface loop."""
     status_block = TRACKER.get(job_id)
     if not status_block:
         return jsonify({'status': 'failed', 'error': 'Job token invalid or expired.'}), 404
