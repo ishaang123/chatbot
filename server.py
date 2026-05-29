@@ -12,6 +12,9 @@ DOWNLOAD_FOLDER = 'downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
+# In-Memory Background Job Monitoring Registry
+TRACKER = {}
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -71,9 +74,7 @@ HTML_TEMPLATE = """
 
         #preview-area { display: none; margin-top: 2.5rem; width: 100%; animation: slideUp 0.5s ease; }
         
-        .preview-grid {
-            display: grid; grid-template-columns: 1fr; gap: 20px;
-        }
+        .preview-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
 
         .sub-card {
             background: rgba(255, 255, 255, 0.02); border: 1px solid #1a1a1a;
@@ -87,14 +88,14 @@ HTML_TEMPLATE = """
 
         .p-thumb { 
             width: 100%; border-radius: 15px; border: 1px solid #333; 
-            background: #000; 
-            object-fit: contain; /* Changed from cover to show full image */
-            max-height: 450px;    /* Prevents vertical overflow */
+            background: #000; object-fit: contain; max-height: 450px; 
         }
         
         #loader { margin-top: 20px; }
         .pulse { width: 10px; height: 10px; background: var(--primary); border-radius: 50%; display: inline-block; margin-right: 8px; animation: pulse 1.5s infinite; }
         
+        #ticker-countdown { font-size: 1.2rem; font-weight: 900; color: #fff; margin-top: 8px; display: block; font-family: monospace; }
+
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -115,6 +116,7 @@ HTML_TEMPLATE = """
         <div id="loader" style="display: none;">
             <span class="pulse"></span>
             <span id="load-text" style="font-size: 0.7rem; letter-spacing: 2px; color: var(--primary); font-weight: bold;">INITIALIZING...</span>
+            <span id="ticker-countdown"></span>
         </div>
 
         <div id="preview-area">
@@ -138,7 +140,6 @@ HTML_TEMPLATE = """
 
     <script>
         let mode = 'mp4';
-        const sleep = ms => new Promise(res => setTimeout(res, ms));
 
         function setMode(m) {
             mode = m;
@@ -154,44 +155,73 @@ HTML_TEMPLATE = """
             const mainBtn = document.getElementById('main-action');
             const loader = document.getElementById('loader');
             const loadText = document.getElementById('load-text');
+            const countdownEl = document.getElementById('ticker-countdown');
             const previewArea = document.getElementById('preview-area');
             const mediaCard = document.getElementById('media-card');
             const siteImg = document.getElementById('res-img-site');
 
             mainBtn.disabled = true;
             loader.style.display = 'block';
-            loadText.innerText = "CAPTURING SITE FEED...";
+            loadText.innerText = "LAUNCHING BACKGROUND PROTOCOL...";
+            countdownEl.innerText = "00:00";
             
-            // REMOVED /crop/ parameter to ensure full image capture
             siteImg.src = `https://image.thum.io/get/maxAge/1/width/800/${url}`;
             previewArea.style.display = 'block';
             mediaCard.style.display = 'none';
 
             try {
-                await sleep(1500);
-                loadText.innerText = "BYPASSING PROTOCOLS...";
+                // Initialize background process via the dynamic route handler
+                const initRes = await fetch(`/get-video/${encodeURIComponent(url)}?format=${mode}`);
+                const initData = await initRes.json();
                 
-                const res = await fetch('/extract', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ url, format: mode })
-                });
-                const data = await res.json();
-                
-                if(data.success) {
-                    await sleep(1000);
-                    document.getElementById('res-img-media').src = data.thumbnail;
-                    document.getElementById('res-title').innerText = data.title;
-                    document.getElementById('res-dl').href = `/get-file?file=${data.filename}`;
-                    
-                    mediaCard.style.display = 'block';
-                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                } else {
-                    alert("Error: " + data.error);
+                if (!initData.success) {
+                    alert("Error: " + initData.error);
+                    loader.style.display = 'none';
+                    mainBtn.disabled = false;
+                    return;
                 }
+
+                const jobId = initData.job_id;
+                let startTime = Date.now();
+                
+                // Continuous telemetry polling loop
+                const pollInterval = setInterval(async () => {
+                    // Update frontend live countdown timer ticker
+                    let elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    let mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                    let secs = String(elapsed % 60).padStart(2, '0');
+                    countdownEl.innerText = `${mins}:${secs}`;
+
+                    const statusRes = await fetch(`/check-status/${jobId}`);
+                    const statusData = await statusRes.json();
+
+                    if (statusData.status === 'processing') {
+                        loadText.innerText = "BYPASSING & EXTRACTING MANIFEST STREAMS...";
+                    } 
+                    else if (statusData.status === 'completed') {
+                        clearInterval(pollInterval);
+                        loadText.innerText = "EXTRACTION TERMINATED. SUCCESS.";
+                        countdownEl.innerText = "";
+                        
+                        document.getElementById('res-img-media').src = statusData.thumbnail;
+                        document.getElementById('res-title').innerText = statusData.title;
+                        document.getElementById('res-dl').href = `/get-file?file=${statusData.filename}`;
+                        
+                        mediaCard.style.display = 'block';
+                        loader.style.display = 'none';
+                        mainBtn.disabled = false;
+                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                    } 
+                    else if (statusData.status === 'failed') {
+                        clearInterval(pollInterval);
+                        alert("Extraction Failed: " + statusData.error);
+                        loader.style.display = 'none';
+                        mainBtn.disabled = false;
+                    }
+                }, 2000); // Poll every 2 seconds
+
             } catch(e) {
-                alert("Nexus Server Timed Out.");
-            } finally {
+                alert("Nexus Server Telemetry Timed Out.");
                 loader.style.display = 'none';
                 mainBtn.disabled = false;
             }
@@ -206,19 +236,11 @@ def auto_delete(path):
     if os.path.exists(path):
         os.remove(path)
 
-@app.route('/')
-def home():
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/extract', methods=['POST'])
-def extract():
-    data = request.json
-    url = data.get('url').split('?')[0]
-    fmt = data.get('format', 'mp4')
-    
-    forbidden = ["soundcloud.com", "snd.sc", "youtube.com", "youtu.be", "music.youtube"]
-    if any(x in url.lower() for x in forbidden):
-        return jsonify({'success': False, 'error': 'Platform restricted.'})
+def background_downloader(job_id, url, fmt, forbidden_platforms):
+    """Executes long-running yt-dlp processes inside isolated worker threads."""
+    if any(x in url.lower() for x in forbidden_platforms):
+        TRACKER[job_id] = {'status': 'failed', 'error': 'Platform restricted.'}
+        return
 
     fid = str(uuid.uuid4())[:8]
     ydl_opts = {
@@ -235,7 +257,10 @@ def extract():
             'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '192'}]
         })
     else:
-        ydl_opts.update({'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'})
+        # Multi-tiered fallback chain to process Dailymotion HLS and raw TikTok streams seamlessly
+        ydl_opts.update({
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/bestvideo+bestaudio/best'
+        })
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -243,16 +268,47 @@ def extract():
             fname = ydl.prepare_filename(info)
             if fmt == 'mp3': fname = os.path.splitext(fname)[0] + ".mp3"
 
+            # Register structural cleanup automation
             threading.Thread(target=auto_delete, args=(fname,)).start()
 
-            return jsonify({
-                'success': True,
+            # Push success payload back to memory tracking hub
+            TRACKER[job_id] = {
+                'status': 'completed',
                 'title': info.get('title', 'Media File'),
                 'thumbnail': info.get('thumbnail') or 'https://via.placeholder.com/600x338/111/00f2ff?text=Nexus+V7',
                 'filename': os.path.basename(fname)
-            })
-    except Exception:
-        return jsonify({'success': False, 'error': "Link incompatible or site protected."})
+            }
+    except Exception as e:
+        TRACKER[job_id] = {'status': 'failed', 'error': 'Link incompatible or stream broken.'}
+
+@app.route('/')
+def home():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/get-video/<path:target_url>', methods=['GET'])
+def get_video(target_url):
+    """Asynchronously provisions a background worker thread to execute processing workloads."""
+    # Clean up parameters passed through safe path encoding
+    url = target_url.split('?')[0]
+    fmt = request.args.get('format', 'mp4')
+    
+    forbidden = ["soundcloud.com", "snd.sc", "youtube.com", "youtu.be", "music.youtube"]
+    
+    job_id = str(uuid.uuid4())[:12]
+    TRACKER[job_id] = {'status': 'processing'}
+    
+    # Fire off worker task directly into RAM execution frame
+    threading.Thread(target=background_downloader, args=(job_id, url, fmt, forbidden)).start()
+    
+    return jsonify({'success': True, 'job_id': job_id})
+
+@app.route('/check-status/<job_id>', methods=['GET'])
+def check_status(job_id):
+    """Fast-execution tracking router returning JSON updates on job states."""
+    status_block = TRACKER.get(job_id)
+    if not status_block:
+        return jsonify({'status': 'failed', 'error': 'Job token identity invalid or expired.'}), 404
+    return jsonify(status_block)
 
 @app.route('/get-file')
 def get_file():
