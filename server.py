@@ -1,8 +1,8 @@
 import os
 import re
-import urllib.parse
 import requests
 from flask import Flask, request, jsonify, render_template_string, Response
+import yt_dlp
 
 app = Flask(__name__)
 
@@ -14,9 +14,6 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nexus Ultra | Advanced Stream Core</title>
     <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght=700&family=Outfit:wght=300;600;900&display=swap" rel="stylesheet">
-
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.0/dist/hls.min.js"></script>
-
     <style>
         :root { --primary: #00f2ff; --bg: #020202; --card: rgba(12, 12, 12, 0.98); }
         body { 
@@ -31,13 +28,7 @@ HTML_TEMPLATE = """
         }
         h1 { font-family: 'Syncopate', sans-serif; font-size: 1.8rem; margin: 0; letter-spacing: -3px; }
         .neon { color: var(--primary); text-shadow: 0 0 20px rgba(0,242,255,0.4); }
-
-        .control-panel {
-            margin: 25px 0;
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-        }
+        .control-panel { margin: 25px 0; display: flex; gap: 10px; justify-content: center; }
         input {
             background: #111; border: 1px solid #333; padding: 12px 20px;
             border-radius: 30px; color: #fff; font-family: 'Outfit', sans-serif;
@@ -58,13 +49,11 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>NEXUS<span class="neon">STREAM</span></h1>
-        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">DYNAMIC CORE RESOLVER</p>
-
+        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">YT-DLP CORE ENGINE</p>
         <div class="control-panel">
-            <input type="text" id="video-url-input" value="{{ initial_url }}" placeholder="Enter Dailymotion Video URL...">
+            <input type="text" id="video-url-input" value="{{ initial_url }}" placeholder="Enter Video URL...">
             <button id="load-btn">STREAM</button>
         </div>
-
         <div class="status-badge" id="buffer-status">Ready</div>
         <video id="video-engine" controls playsinline></video>
     </div>
@@ -75,179 +64,92 @@ HTML_TEMPLATE = """
             const loadBtn = document.getElementById('load-btn');
             const urlInput = document.getElementById('video-url-input');
             const statusBadge = document.getElementById('buffer-status');
-            let hlsInstance = null;
 
             function playStream(videoUrl) {
                 if (!videoUrl) return;
-
-                statusBadge.textContent = "Syncing Token IP Handshake...";
+                statusBadge.textContent = "Resolving via yt-dlp core...";
                 statusBadge.style.color = "var(--primary)";
 
-                if (hlsInstance) {
-                    hlsInstance.destroy();
-                    hlsInstance = null;
-                }
                 video.pause();
                 video.removeAttribute('src');
                 video.load();
 
-                const targetUrl = `/fetch-stream?url=${encodeURIComponent(videoUrl)}&type=meta`;
-
-                fetch(targetUrl)
-                    .then(response => {
-                        if (!response.ok) throw new Error("Stream compilation dropped.");
-                        return response.json();
-                    })
-                    .then(data => {
-                        const proxiedManifestUrl = data.stream_url;
-
-                        statusBadge.textContent = "IP Synchronized. Tunneling Video Tracks...";
-                        statusBadge.style.color = "#00ff66";
-
-                        if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                            video.src = proxiedManifestUrl;
-                            video.play().catch(() => {});
-                        } 
-                        else if (Hls.isSupported()) {
-                            hlsInstance = new Hls({
-                                maxBufferSize: 20 * 1024 * 1024
-                            });
-                            hlsInstance.loadSource(proxiedManifestUrl);
-                            hlsInstance.attachMedia(video);
-                            hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
-                                video.play().catch(() => {});
-                            });
-                        }
-                    })
-                    .catch(err => {
-                        console.error(err);
-                        statusBadge.textContent = "Fault: Security verification dropped.";
-                        statusBadge.style.color = "#ff3333";
-                    });
+                // Call our local proxy endpoint
+                const proxyUrl = `/stream-bridge?url=${encodeURIComponent(videoUrl)}`;
+                
+                video.src = proxyUrl;
+                statusBadge.textContent = "Streaming Live Pipeline...";
+                statusBadge.style.color = "#00ff66";
+                
+                video.play().catch(err => {
+                    console.log("Playback interaction deferred.");
+                });
             }
 
             playStream(urlInput.value.trim());
-
             loadBtn.addEventListener('click', () => {
                 const cleanUrl = urlInput.value.trim();
                 if (cleanUrl) playStream(cleanUrl);
             });
-        });
-    </script>
+        </script>
 </body>
 </html>
 """
-
-
-def extract_video_id(url):
-    match = re.search(r'(?:dailymotion\.com\/(?:video|embed\/video)\/|dai\.ly\/)([a-zA-Z0-9]+)', url)
-    return match.group(1) if match else None
-
 
 @app.route('/')
 def home():
     target_url = request.args.get('url', 'https://www.dailymotion.com/video/x9lnilq')
     return render_template_string(HTML_TEMPLATE, initial_url=target_url)
 
+@app.route('/stream-bridge')
+def stream_bridge():
+    video_url = request.args.get('url')
+    if not video_url:
+        return "Missing URL", 400
 
-@app.route('/fetch-stream')
-def fetch_stream():
-    target_url = request.args.get('url')
-    req_type = request.args.get('type', 'chunk')
-
-    # Context survival parameter for underlying fragments
-    fallback_base = request.args.get('base_url', '')
-
-    if not target_url:
-        return "Missing Target Resource URL", 400
-
-    # Reconstruct root relative addresses if they escape client side mapping
-    if target_url.startswith('/') and not target_url.startswith('//') and fallback_base:
-        target_url = urllib.parse.urljoin(fallback_base, target_url)
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Referer': 'https://www.dailymotion.com/',
-        'Accept': '*/*'
+    # Configure yt-dlp options to safely grab a direct progressive video track
+    ydl_opts = {
+        'format': 'best', # Grabs a single combined format to avoid needing ffmpeg merging
+        'quiet': True,
+        'no_warnings': True,
+        'allowed_extractors': ['dailymotion', 'generic']
     }
 
-    user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if user_ip:
-        headers['X-Forwarded-For'] = user_ip.split(',')[0].strip()
-        headers['Client-IP'] = headers['X-Forwarded-For']
-
     try:
-        if req_type == 'meta':
-            video_id = extract_video_id(target_url)
-            if not video_id:
-                return jsonify({"error": "Invalid Video Link Structure"}), 400
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+            # This is the single, direct remote HTTP link to the stream track
+            direct_stream_url = info.get('url')
 
-            meta_res = requests.get(f"https://www.dailymotion.com/player/metadata/video/{video_id}", headers=headers,
-                                    timeout=10)
-            metadata = meta_res.json()
-            master_url = metadata['qualities']['auto'][0]['url']
+        if not direct_stream_url:
+            return "Could not resolve stream source url", 500
 
-            encoded_url = urllib.parse.quote(master_url)
-            return jsonify({
-                "status": "success",
-                "stream_url": f"/fetch-stream?url={encoded_url}&type=playlist"
-            })
-
-        elif req_type == 'playlist':
-            res = requests.get(target_url, headers=headers, timeout=10)
-            lines = res.text.splitlines()
-            rewritten_lines = []
-
-            # Save the true remote host origin to resolve sub-items later
-            parsed_origin = urllib.parse.urlparse(target_url)
-            base_origin_url = f"{parsed_origin.scheme}://{parsed_origin.netloc}"
-
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-
-                if line.startswith('#'):
-                    rewritten_lines.append(line)
-                    continue
-
-                # Form fully qualified URLs immediately
-                absolute_url = urllib.parse.urljoin(target_url, line)
-                encoded_line = urllib.parse.quote(absolute_url)
-                encoded_origin = urllib.parse.quote(base_origin_url)
-
-                if '.m3u8' in line:
-                    next_type = "playlist"
-                else:
-                    next_type = "chunk"
-
-                # Append absolute local proxy routes with context trackers
-                local_proxy_route = f"/fetch-stream?url={encoded_line}&type={next_type}&base_url={encoded_origin}"
-                rewritten_lines.append(local_proxy_route)
-
-            return Response(
-                "\n".join(rewritten_lines),
-                content_type='application/vnd.apple.mpegurl',
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-
-        else:
-            res = requests.get(target_url, headers=headers, stream=True, timeout=10)
-
-            def generate_chunks():
-                for chunk in res.iter_content(chunk_size=8192):
+        # Tunnel the direct stream data through Render to keep your home IP fully anonymous
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'Accept': '*/*'
+        }
+        
+        # Stream the continuous video stream payload back down to the video tag
+        res = requests.get(direct_stream_url, headers=headers, stream=True, timeout=15)
+        
+        def pipe_data():
+            for chunk in res.iter_content(chunk_size=65536):
+                if chunk:
                     yield chunk
 
-            return Response(
-                generate_chunks(),
-                status=res.status_code,
-                content_type=res.headers.get('Content-Type', 'video/mp2t'),
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
+        return Response(
+            pipe_data(),
+            status=res.status_code,
+            content_type=res.headers.get('Content-Type', 'video/mp4'),
+            headers={
+                'X-Accel-Buffering': 'no',
+                'Cache-Control': 'no-cache, no-store'
+            }
+        )
 
     except Exception as e:
         return str(e), 500
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
