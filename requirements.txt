@@ -1,4 +1,5 @@
 Flask>=3.0.0
 yt-dlp>=2025.01.15
+curl_cffi>=0.7.0
 requests>=2.31.0
 gunicorn>=21.2.0
