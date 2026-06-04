@@ -101,19 +101,24 @@ HTML_TEMPLATE = """
 def home():
     target_url = request.args.get('url', 'https://www.dailymotion.com/video/x9lnilq')
     return render_template_string(HTML_TEMPLATE, initial_url=target_url)
-
 @app.route('/stream-bridge')
 def stream_bridge():
     video_url = request.args.get('url')
     if not video_url:
         return "Missing URL", 400
 
+    # Import the native impersonation object class required by newer yt-dlp versions
+    from yt_dlp.networking.impersonate import ImpersonateTarget
+
     ydl_opts = {
         'format': 'best',
         'quiet': True,
         'no_warnings': True,
         'allowed_extractors': ['dailymotion', 'generic'],
-        'impersonate': 'chrome',  # Forces yt-dlp to mirror a standard modern browser TLS signature
+        # Force yt-dlp to use the curl_cffi client handler explicitly
+        'extractor_args': {'utils': {'http_backend': ['curl_cffi']}},
+        # Safely convert the string into a valid ImpersonateTarget object
+        'impersonate': ImpersonateTarget.from_str('chrome')
     }
 
     try:
