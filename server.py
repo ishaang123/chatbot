@@ -1,9 +1,10 @@
-from flask import Flask, request, render_template_string, send_file, jsonify
-import yt_dlp
 import os
 import uuid
 import threading
 import time
+import requests
+from flask import Flask, request, render_template_string, send_file, jsonify, Response
+import yt_dlp
 
 app = Flask(__name__)
 
@@ -231,7 +232,10 @@ HTML_TEMPLATE = """
 def auto_delete(path):
     time.sleep(300) 
     if os.path.exists(path):
-        os.remove(path)
+        try:
+            os.remove(path)
+        except Exception:
+            pass
 
 def background_downloader(job_id, url, fmt, forbidden_platforms):
     if any(x in url.lower() for x in forbidden_platforms):
@@ -244,8 +248,6 @@ def background_downloader(job_id, url, fmt, forbidden_platforms):
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
-        
-        # --- TOP LEVEL IMPERSONATION OVERRIDE ---
         'impersonate': 'chrome',
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -268,7 +270,8 @@ def background_downloader(job_id, url, fmt, forbidden_platforms):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             fname = ydl.prepare_filename(info)
-            if fmt == 'mp3': fname = os.path.splitext(fname)[0] + ".mp3"
+            if fmt == 'mp3': 
+                fname = os.path.splitext(fname)[0] + ".mp3"
 
             threading.Thread(target=auto_delete, args=(fname,)).start()
 
@@ -307,41 +310,37 @@ def check_status(job_id):
 @app.route('/get-file')
 def get_file():
     fname = request.args.get('file')
+    if not fname:
+        return "Bad Request", 400
     fpath = os.path.join(DOWNLOAD_FOLDER, os.path.basename(fname))
     if os.path.exists(fpath):
         return send_file(fpath, as_attachment=True)
     return "Expired", 404 
 
-import requests
-from flask import Flask, request, Response, render_template
 @app.route('/proxy')
 def proxy():
-    # Get the target URL from the query string (e.g., /proxy?url=https://...)
     target_url = request.args.get('url')
     if not target_url:
         return "Missing URL parameter", 400
 
-    # Forward the request to the actual video server
     headers = {'X-Requested-With': 'XMLHttpRequest'}
-    response = requests.get(target_url, headers=headers, stream=True)
+    try:
+        response = requests.get(target_url, headers=headers, stream=True)
+        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+        response_headers = [
+            (name, value) for (name, value) in response.headers.items()
+            if name.lower() not in excluded_headers
+        ]
+        response_headers.append(('Access-Control-Allow-Origin', '*'))
+        response_headers.append(('Access-Control-Allow-Headers', 'X-Requested-With'))
 
-    # Exclude fragile hop-by-hop headers
-    excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
-    response_headers = [
-        (name, value) for (name, value) in response.headers.items()
-        if name.lower() not in excluded_headers
-    ]
-
-    # Add global CORS headers so your browser script can access it
-    response_headers.append(('Access-Control-Allow-Origin', '*'))
-    response_headers.append(('Access-Control-Allow-Headers', 'X-Requested-With'))
-
-    # Stream the data (works efficiently for video fragments)
-    return Response(
-        response.iter_content(chunk_size=1024),
-        status=response.status_code,
-        headers=response_headers
-    )
+        return Response(
+            response.iter_content(chunk_size=4096),
+            status=response.status_code,
+            headers=response_headers
+        )
+    except Exception as e:
+        return f"Proxy Error: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
