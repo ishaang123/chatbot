@@ -74,7 +74,6 @@ HTML_TEMPLATE = """
                 video.removeAttribute('src');
                 video.load();
 
-                // Call our local proxy endpoint
                 const proxyUrl = `/stream-bridge?url=${encodeURIComponent(videoUrl)}`;
                 
                 video.src = proxyUrl;
@@ -87,11 +86,13 @@ HTML_TEMPLATE = """
             }
 
             playStream(urlInput.value.trim());
+
             loadBtn.addEventListener('click', () => {
                 const cleanUrl = urlInput.value.trim();
                 if (cleanUrl) playStream(cleanUrl);
             });
-        </script>
+        });
+    </script>
 </body>
 </html>
 """
@@ -107,9 +108,8 @@ def stream_bridge():
     if not video_url:
         return "Missing URL", 400
 
-    # Configure yt-dlp options to safely grab a direct progressive video track
     ydl_opts = {
-        'format': 'best', # Grabs a single combined format to avoid needing ffmpeg merging
+        'format': 'best',
         'quiet': True,
         'no_warnings': True,
         'allowed_extractors': ['dailymotion', 'generic']
@@ -118,19 +118,16 @@ def stream_bridge():
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
-            # This is the single, direct remote HTTP link to the stream track
             direct_stream_url = info.get('url')
 
         if not direct_stream_url:
             return "Could not resolve stream source url", 500
 
-        # Tunnel the direct stream data through Render to keep your home IP fully anonymous
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
             'Accept': '*/*'
         }
         
-        # Stream the continuous video stream payload back down to the video tag
         res = requests.get(direct_stream_url, headers=headers, stream=True, timeout=15)
         
         def pipe_data():
