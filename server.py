@@ -14,9 +14,7 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nexus Ultra | Advanced Stream Core</title>
     <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght=700&family=Outfit:wght=300;600;900&display=swap" rel="stylesheet">
-    
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.0/dist/hls.min.js"></script>
-
     <style>
         :root { --primary: #00f2ff; --bg: #020202; --card: rgba(12, 12, 12, 0.98); }
         body { 
@@ -52,7 +50,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>NEXUS<span class="neon">STREAM</span></h1>
-        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">DIRECT API CORE</p>
+        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">DYNAMIC TUNNEL MATRIX</p>
         <div class="control-panel">
             <input type="text" id="video-url-input" value="{{ initial_url }}" placeholder="Enter Video URL...">
             <button id="load-btn">STREAM</button>
@@ -71,7 +69,7 @@ HTML_TEMPLATE = """
 
             function playStream(videoUrl) {
                 if (!videoUrl) return;
-                statusBadge.textContent = "Querying API Manifest Matrix...";
+                statusBadge.textContent = "Negotiating Proxy Handshake...";
                 statusBadge.style.color = "var(--primary)";
 
                 if (hlsInstance) {
@@ -82,27 +80,39 @@ HTML_TEMPLATE = """
                 video.removeAttribute('src');
                 video.load();
 
-                // Direct link to our manifest locator endpoint
-                const proxyManifestUrl = `/get-manifest?url=${encodeURIComponent(videoUrl)}`;
+                // Initial handshake to get our rewritten master playlist
+                const proxyManifestUrl = `/fetch-stream?url=${encodeURIComponent(videoUrl)}&type=meta`;
                 
-                statusBadge.textContent = "Tunneling Live Stream...";
-                statusBadge.style.color = "#00ff66";
+                fetch(proxyManifestUrl)
+                    .then(res => {
+                        if (!res.ok) throw new Error("Manifest generation rejected.");
+                        return res.json();
+                    })
+                    .then(data => {
+                        statusBadge.textContent = "Tunnel Secured. Pipeline Active...";
+                        statusBadge.style.color = "#00ff66";
 
-                if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = proxyManifestUrl;
-                    video.play().catch(() => {});
-                } 
-                else if (Hls.isSupported()) {
-                    hlsInstance = new Hls({
-                        maxBufferSize: 30 * 1024 * 1024,
-                        enableWorker: false // Disabling service worker layers to favor direct Render caching bypass
+                        if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                            video.src = data.stream_url;
+                            video.play().catch(() => {});
+                        } 
+                        else if (Hls.isSupported()) {
+                            hlsInstance = new Hls({
+                                maxBufferSize: 20 * 1024 * 1024,
+                                enableWorker: false
+                            });
+                            hlsInstance.loadSource(data.stream_url);
+                            hlsInstance.attachMedia(video);
+                            hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
+                                video.play().catch(() => {});
+                            });
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        statusBadge.textContent = "Connection Fault.";
+                        statusBadge.style.color = "#ff3333";
                     });
-                    hlsInstance.loadSource(proxyManifestUrl);
-                    hlsInstance.attachMedia(video);
-                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
-                        video.play().catch(() => {});
-                    });
-                }
             }
 
             playStream(urlInput.value.trim());
@@ -126,41 +136,85 @@ def home():
     target_url = request.args.get('url', 'https://www.dailymotion.com/video/x9lnilq')
     return render_template_string(HTML_TEMPLATE, initial_url=target_url)
 
-@app.route('/get-manifest')
-def get_manifest():
-    video_url = request.args.get('url')
-    if not video_url:
-        return "Missing URL", 400
+@app.route('/fetch-stream')
+def fetch_stream():
+    target_url = request.args.get('url')
+    req_type = request.args.get('type', 'chunk')
+    fallback_base = request.args.get('base_url', '')
 
-    video_id = extract_video_id(video_url)
-    if not video_id:
-        return "Invalid Link Structure", 400
+    if not target_url:
+        return "Missing Target URL", 400
+
+    if target_url.startswith('/') and not target_url.startswith('//') and fallback_base:
+        target_url = urllib.parse.urljoin(fallback_base, target_url)
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://www.dailymotion.com/'
     }
-    
+
     try:
-        # Use the official API metadata endpoint to completely bypass website anti-bot setups
-        meta_res = requests.get(f"https://www.dailymotion.com/player/metadata/video/{video_id}", headers=headers, timeout=10)
-        metadata = meta_res.json()
-        
-        # Grab the direct .m3u8 stream location file
-        master_m3u8_url = metadata['qualities']['auto'][0]['url']
-        
-        # Pull the structural text data from the playlist manifest file securely on the backend
-        playlist_res = requests.get(master_m3u8_url, headers=headers, timeout=10)
-        
-        # Return the clean stream manifest directly back to hls.js with open streaming headers
-        return Response(
-            playlist_res.text,
-            content_type='application/vnd.apple.mpegurl',
-            headers={
-                'Access-Control-Allow-Origin': '*',
-                'Cache-Control': 'no-cache, no-store'
-            }
-        )
+        # Phase 1: Call API endpoint to get the hidden master m3u8
+        if req_type == 'meta':
+            video_id = extract_video_id(target_url)
+            if not video_id:
+                return jsonify({"error": "Invalid Video Link Structure"}), 400
+                
+            meta_res = requests.get(f"https://www.dailymotion.com/player/metadata/video/{video_id}", headers=headers, timeout=10)
+            master_url = meta_res.json()['qualities']['auto'][0]['url']
+            
+            return jsonify({
+                "status": "success",
+                "stream_url": f"/fetch-stream?url={urllib.parse.quote(master_url)}&type=playlist"
+            })
+
+        # Phase 2: Rewrite sub-playlists so everything points back to your Render server
+        elif req_type == 'playlist':
+            res = requests.get(target_url, headers=headers, timeout=10)
+            lines = res.text.splitlines()
+            rewritten_lines = []
+            
+            parsed_origin = urllib.parse.urlparse(target_url)
+            base_origin_url = f"{parsed_origin.scheme}://{parsed_origin.netloc}"
+            
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    rewritten_lines.append(line)
+                    continue
+
+                absolute_url = urllib.parse.urljoin(target_url, line)
+                next_type = "playlist" if (".m3u8" in line or "manifest" in line) else "chunk"
+                
+                # Turn every segment URL into an internal route through your Render proxy
+                local_route = f"/fetch-stream?url={urllib.parse.quote(absolute_url)}&type={next_type}&base_url={urllib.parse.quote(base_origin_url)}"
+                rewritten_lines.append(local_route)
+                    
+            return Response(
+                "\n".join(rewritten_lines),
+                content_type='application/vnd.apple.mpegurl',
+                headers={'Access-Control-Allow-Origin': '*'}
+            )
+
+        # Phase 3: Act as the data pipeline tunnel for the actual video data chunks (.ts)
+        else:
+            res = requests.get(target_url, headers=headers, stream=True, timeout=15)
+            
+            def generate_chunks():
+                for chunk in res.iter_content(chunk_size=32768):
+                    if chunk:
+                        yield chunk
+
+            return Response(
+                generate_chunks(),
+                status=res.status_code,
+                content_type=res.headers.get('Content-Type', 'video/mp2t'),
+                headers={
+                    'Access-Control-Allow-Origin': '*',
+                    'X-Accel-Buffering': 'no',
+                    'Cache-Control': 'no-cache, no-store'
+                }
+            )
 
     except Exception as e:
         return str(e), 500
