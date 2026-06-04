@@ -312,5 +312,36 @@ def get_file():
         return send_file(fpath, as_attachment=True)
     return "Expired", 404 
 
+import requests
+from flask import Flask, request, Response, render_template
+@app.route('/proxy')
+def proxy():
+    # Get the target URL from the query string (e.g., /proxy?url=https://...)
+    target_url = request.args.get('url')
+    if not target_url:
+        return "Missing URL parameter", 400
+
+    # Forward the request to the actual video server
+    headers = {'X-Requested-With': 'XMLHttpRequest'}
+    response = requests.get(target_url, headers=headers, stream=True)
+
+    # Exclude fragile hop-by-hop headers
+    excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+    response_headers = [
+        (name, value) for (name, value) in response.headers.items()
+        if name.lower() not in excluded_headers
+    ]
+
+    # Add global CORS headers so your browser script can access it
+    response_headers.append(('Access-Control-Allow-Origin', '*'))
+    response_headers.append(('Access-Control-Allow-Headers', 'X-Requested-With'))
+
+    # Stream the data (works efficiently for video fragments)
+    return Response(
+        response.iter_content(chunk_size=1024),
+        status=response.status_code,
+        headers=response_headers
+    )
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
