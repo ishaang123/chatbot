@@ -3,7 +3,6 @@ import re
 import urllib.parse
 import requests
 from flask import Flask, request, jsonify, render_template_string, Response
-import yt_dlp
 
 app = Flask(__name__)
 
@@ -15,6 +14,9 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nexus Ultra | Advanced Stream Core</title>
     <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght=700&family=Outfit:wght=300;600;900&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.0/dist/hls.min.js"></script>
+
     <style>
         :root { --primary: #00f2ff; --bg: #020202; --card: rgba(12, 12, 12, 0.98); }
         body { 
@@ -50,7 +52,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>NEXUS<span class="neon">STREAM</span></h1>
-        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">HYBRID MANIFEST RESOLVER</p>
+        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">DIRECT API CORE</p>
         <div class="control-panel">
             <input type="text" id="video-url-input" value="{{ initial_url }}" placeholder="Enter Video URL...">
             <button id="load-btn">STREAM</button>
@@ -65,25 +67,42 @@ HTML_TEMPLATE = """
             const loadBtn = document.getElementById('load-btn');
             const urlInput = document.getElementById('video-url-input');
             const statusBadge = document.getElementById('buffer-status');
+            let hlsInstance = null;
 
             function playStream(videoUrl) {
                 if (!videoUrl) return;
-                statusBadge.textContent = "Resolving backend manifest...";
+                statusBadge.textContent = "Querying API Manifest Matrix...";
                 statusBadge.style.color = "var(--primary)";
 
+                if (hlsInstance) {
+                    hlsInstance.destroy();
+                    hlsInstance = null;
+                }
                 video.pause();
                 video.removeAttribute('src');
                 video.load();
 
-                const proxyUrl = `/stream-bridge?url=${encodeURIComponent(videoUrl)}`;
+                // Direct link to our manifest locator endpoint
+                const proxyManifestUrl = `/get-manifest?url=${encodeURIComponent(videoUrl)}`;
                 
-                video.src = proxyUrl;
-                statusBadge.textContent = "Streaming Live Pipeline...";
+                statusBadge.textContent = "Tunneling Live Stream...";
                 statusBadge.style.color = "#00ff66";
-                
-                video.play().catch(err => {
-                    console.log("Playback deferred.");
-                });
+
+                if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = proxyManifestUrl;
+                    video.play().catch(() => {});
+                } 
+                else if (Hls.isSupported()) {
+                    hlsInstance = new Hls({
+                        maxBufferSize: 30 * 1024 * 1024,
+                        enableWorker: false // Disabling service worker layers to favor direct Render caching bypass
+                    });
+                    hlsInstance.loadSource(proxyManifestUrl);
+                    hlsInstance.attachMedia(video);
+                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
+                        video.play().catch(() => {});
+                    });
+                }
             }
 
             playStream(urlInput.value.trim());
@@ -107,8 +126,8 @@ def home():
     target_url = request.args.get('url', 'https://www.dailymotion.com/video/x9lnilq')
     return render_template_string(HTML_TEMPLATE, initial_url=target_url)
 
-@app.route('/stream-bridge')
-def stream_bridge():
+@app.route('/get-manifest')
+def get_manifest():
     video_url = request.args.get('url')
     if not video_url:
         return "Missing URL", 400
@@ -117,46 +136,28 @@ def stream_bridge():
     if not video_id:
         return "Invalid Link Structure", 400
 
-    # Step 1: Handshake with Dailymotion metadata to fetch the raw direct .m3u8 url
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://www.dailymotion.com/'
     }
     
     try:
+        # Use the official API metadata endpoint to completely bypass website anti-bot setups
         meta_res = requests.get(f"https://www.dailymotion.com/player/metadata/video/{video_id}", headers=headers, timeout=10)
         metadata = meta_res.json()
+        
+        # Grab the direct .m3u8 stream location file
         master_m3u8_url = metadata['qualities']['auto'][0]['url']
         
-        # Step 2: Feed the raw, extracted .m3u8 url directly into yt-dlp
-        ydl_opts = {
-            'format': 'best',
-            'quiet': True,
-            'no_warnings': True,
-        }
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # yt-dlp interprets raw .m3u8 urls as direct stream lists natively
-            info = ydl.extract_info(master_m3u8_url, download=False)
-            direct_stream_url = info.get('url')
-
-        if not direct_stream_url:
-            return "Could not resolve stream source url", 500
-
-        # Step 3: Stream the video data through Render
-        res = requests.get(direct_stream_url, headers=headers, stream=True, timeout=15)
+        # Pull the structural text data from the playlist manifest file securely on the backend
+        playlist_res = requests.get(master_m3u8_url, headers=headers, timeout=10)
         
-        def pipe_data():
-            for chunk in res.iter_content(chunk_size=65536):
-                if chunk:
-                    yield chunk
-
+        # Return the clean stream manifest directly back to hls.js with open streaming headers
         return Response(
-            pipe_data(),
-            status=res.status_code,
-            content_type=res.headers.get('Content-Type', 'video/mp4'),
+            playlist_res.text,
+            content_type='application/vnd.apple.mpegurl',
             headers={
-                'X-Accel-Buffering': 'no',
+                'Access-Control-Allow-Origin': '*',
                 'Cache-Control': 'no-cache, no-store'
             }
         )
