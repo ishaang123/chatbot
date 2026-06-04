@@ -4,7 +4,6 @@ from flask import Flask, request, Response, render_template_string
 
 app = Flask(__name__)
 
-# Simplified HTML template that uses a native video tag expecting a single media stream
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -33,7 +32,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>NEXUS<span class="neon">STREAM</span></h1>
-        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">SINGLE-STREAM MP4 TRANSLATOR</p>
+        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">LIVE TS-MP4 TRANSLATOR</p>
 
         <video id="video-engine" controls playsinline src="/stream-video/{{ active_id }}"></video>
     </div>
@@ -41,7 +40,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# Establish a single persistent HTTP session to preserve upstream authorization cookies naturally
+# Establish session object with browser headers to prevent 403 errors
 session = requests.Session()
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -54,26 +53,23 @@ session.headers.update({
 def home():
     return render_template_string(HTML_TEMPLATE, active_id="x9lnilq")
 
+# The route rule accepts matching variants to prevent routing 404 errors
 @app.route('/stream-video/<video_id>')
 def stream_video(video_id):
-    """
-    Resolves manifests, fetches segments internally, and returns a single stream.
-    """
     try:
-        # Step 1: Request metadata to extract the master playlist URL
+        # Step 1: Request video configuration data
         meta_url = f"https://www.dailymotion.com/player/metadata/video/{video_id}"
-        meta_res = session.get(meta_url)
+        meta_res = session.get(meta_url, timeout=10)
         if meta_res.status_code != 200:
-            return "Upstream Token Authorization Rejected.", meta_res.status_code
+            return f"Upstream Token Authorization Rejected.", meta_res.status_code
         
         metadata = meta_res.json()
         master_m3u8_url = metadata['qualities']['auto'][0]['url']
         
-        # Step 2: Fetch the master playlist content
-        master_res = session.get(master_m3u8_url)
+        # Step 2: Grab the master index map text
+        master_res = session.get(master_m3u8_url, timeout=10)
         master_text = master_res.text
         
-        # Parse the master manifest to find the target sub-playlist URL
         base_url = master_m3u8_url[0:master_m3u8_url.rfind('/')+1]
         target_playlist_url = ""
         
@@ -86,8 +82,8 @@ def stream_video(video_id):
         if not target_playlist_url:
             target_playlist_url = master_m3u8_url
             
-        # Step 3: Fetch the sub-playlist containing individual media chunks
-        playlist_res = session.get(target_playlist_url)
+        # Step 3: Extract variant chunks from sub-playlist mapping
+        playlist_res = session.get(target_playlist_url, timeout=10)
         playlist_text = playlist_res.text
         playlist_base_url = target_playlist_url[0:target_playlist_url.rfind('/')+1]
         
@@ -98,28 +94,28 @@ def stream_video(video_id):
                 chunk_urls.append(line if line.startswith('http') else playlist_base_url + line)
                 
         if not chunk_urls:
-            return "No accessible media chunks located.", 404
+            return "No accessible media fragments located.", 404
 
-        # Step 4: Define a generator to yield chunk data sequentially over the HTTP connection
+        # Step 4: Stream fragments sequentially to the response channel
         def generate_video_stream():
-            # Cap segments if necessary to manage server memory/timeout limits
             for url in chunk_urls:
                 try:
+                    # Request individual transport stream components sequentially
                     chunk_res = session.get(url, stream=True, timeout=10)
                     if chunk_res.status_code == 200:
-                        for block in chunk_res.iter_content(chunk_size=16384):
+                        for block in chunk_res.iter_content(chunk_size=32768):
                             yield block
                 except Exception:
-                    continue  # Safely skip corrupted or dropped chunks during translation
+                    continue
 
-        # Return the generator as a continuous video response stream.
-        # Note: Using video/mp4 MIME type labels the incoming stream for standard player compatibility.
+        # Use video/mp4 MIME types to enable default media browser components
         return Response(
             generate_video_stream(),
             mimetype="video/mp4",
             headers={
                 "Access-Control-Allow-Origin": "*",
-                "Content-Type": "video/mp4"
+                "Content-Type": "video/mp4",
+                "Accept-Ranges": "bytes"
             }
         )
         
