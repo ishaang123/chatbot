@@ -112,7 +112,8 @@ def stream_bridge():
         'format': 'best',
         'quiet': True,
         'no_warnings': True,
-        'allowed_extractors': ['dailymotion', 'generic']
+        'allowed_extractors': ['dailymotion', 'generic'],
+        'impersonate': 'chrome',  # Forces yt-dlp to mirror a standard modern browser TLS signature
     }
 
     try:
