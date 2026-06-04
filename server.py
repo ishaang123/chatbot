@@ -4,7 +4,6 @@ from flask import Flask, request, Response, render_template_string
 
 app = Flask(__name__)
 
-# Minimalistic HTML UI featuring only the local network bypass architecture
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -61,44 +60,76 @@ HTML_TEMPLATE = """
             const loadingContainer = document.getElementById('loading-container');
             const videoElement = document.getElementById('native-stitched-player');
 
-            // Route calls directly back through your Flask proxy
             const localProxyEndpoint = `${window.location.origin}/proxy?url=`;
+            const fetchOptions = { method: 'GET', referrerPolicy: 'no-referrer' };
 
             try {
                 // Step 1: Request manifest configurations
                 statusDiv.innerText = "Routing metadata matrix...";
-                progressBar.style.width = "15%";
+                progressBar.style.width = "10%";
 
                 const targetMetadataUrl = `https://www.dailymotion.com/player/metadata/video/${videoId}`;
-                const metaResponse = await fetch(`${localProxyEndpoint}${encodeURIComponent(targetMetadataUrl)}`);
+                const metaResponse = await fetch(`${localProxyEndpoint}${encodeURIComponent(targetMetadataUrl)}`, fetchOptions);
                 if (!metaResponse.ok) throw new Error("Metadata request rejected.");
                 const metadata = await metaResponse.json();
                 
-                const m3u8Url = metadata.qualities.auto[0].url;
+                const masterM3u8Url = metadata.qualities.auto[0].url;
 
                 // Step 2: Grab the HLS index manifest mapping
                 statusDiv.innerText = "Parsing streaming segment indexes...";
-                progressBar.style.width = "35%";
+                progressBar.style.width = "25%";
 
-                const playlistResponse = await fetch(`${localProxyEndpoint}${encodeURIComponent(m3u8Url)}`);
+                const masterResponse = await fetch(`${localProxyEndpoint}${encodeURIComponent(masterM3u8Url)}`, fetchOptions);
+                if (!masterResponse.ok) throw new Error("Master manifest collection dropped.");
+                const masterText = await masterResponse.text();
+
+                // Correct relative sub-playlist matching structures
+                const masterLines = masterText.split('\\n');
+                let targetPlaylistUrl = "";
+                let masterBaseUrl = masterM3u8Url.substring(0, masterM3u8Url.lastIndexOf('/') + 1);
+
+                for (let i = 0; i < masterLines.length; i++) {
+                    let line = masterLines[i].trim();
+                    if (line && !line.startsWith('#')) {
+                        targetPlaylistUrl = line.startsWith('http') ? line : masterBaseUrl + line;
+                        break;
+                    }
+                }
+                if (!targetPlaylistUrl) targetPlaylistUrl = masterM3u8Url;
+
+                // Step 3: Fetch active data chunks sub-manifest layout
+                statusDiv.innerText = "Mapping block fragment paths...";
+                progressBar.style.width = "40%";
+                
+                const playlistResponse = await fetch(`${localProxyEndpoint}${encodeURIComponent(targetPlaylistUrl)}`, fetchOptions);
                 if (!playlistResponse.ok) throw new Error("Index playlist mapping rejected.");
                 const playlistText = await playlistResponse.text();
 
-                // Step 3: Match segment file vectors
-                const chunkUrls = playlistText.split('\\n').filter(line => line.trim().startsWith('http'));
+                const chunkLines = playlistText.split('\\n');
+                const chunkUrls = [];
+                let playlistBaseUrl = targetPlaylistUrl.substring(0, targetPlaylistUrl.lastIndexOf('/') + 1);
+
+                for (let line of chunkLines) {
+                    line = line.trim();
+                    if (line && !line.startsWith('#')) {
+                        chunkUrls.push(line.startsWith('http') ? line : playlistBaseUrl + line);
+                    }
+                }
+
                 if (chunkUrls.length === 0) throw new Error("No active media sequences detected.");
 
                 // Step 4: Stream fragments sequentially through local service proxy
                 const videoPieces = [];
-                const totalChunks = chunkUrls.length;
+                // Capped at 35 segments to avoid resource crashing browser engine tabs
+                const totalChunks = Math.min(chunkUrls.length, 35); 
 
                 for (let i = 0; i < totalChunks; i++) {
-                    const percentDone = 35 + Math.floor((i / totalChunks) * 55);
+                    const percentDone = 40 + Math.floor((i / totalChunks) * 50);
                     progressBar.style.width = `${percentDone}%`;
                     statusDiv.innerText = `Buffering media asset chunk ${i + 1} of ${totalChunks}...`;
 
-                    const chunkResponse = await fetch(`${localProxyEndpoint}${encodeURIComponent(chunkUrls[i])}`);
-                    if (!chunkResponse.ok) throw new Error(`Segment [${i}] buffer drop fault.`);
+                    const chunkResponse = await fetch(`${localProxyEndpoint}${encodeURIComponent(chunkUrls[i])}`, fetchOptions);
+                    if (!chunkResponse.ok) continue; // Bypass isolated dropped fragments safely
 
                     const chunkData = await chunkResponse.arrayBuffer();
                     videoPieces.push(chunkData);
@@ -142,17 +173,19 @@ def proxy():
     if not target_url:
         return "Missing URL target parameter", 400
 
-    # Emulate necessary headers to bypass the origin gatekeeper
-    headers = {'X-Requested-With': 'XMLHttpRequest'}
+    # Clean headers emulating real browser calls to bypass anti-hotlinking rules
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.dailymotion.com/',
+        'X-Requested-With': 'XMLHttpRequest'
+    }
+    
     try:
-        # Stream the response content to avoid heavy RAM usage spikes on small server nodes
         res = requests.get(target_url, headers=headers, stream=True)
         
-        # Clean down hop-by-hop delivery configurations
         excluded = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
         response_headers = [(n, v) for (n, v) in res.headers.items() if n.lower() not in excluded]
         
-        # Append dynamic origin properties to resolve browser CORS security constraints
         response_headers.append(('Access-Control-Allow-Origin', '*'))
         response_headers.append(('Access-Control-Allow-Headers', 'X-Requested-With, Origin'))
 
