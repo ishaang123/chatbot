@@ -1,5 +1,6 @@
 import os
 import re
+import urllib.parse
 import requests
 from flask import Flask, request, jsonify, render_template_string, Response
 import yt_dlp
@@ -49,7 +50,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>NEXUS<span class="neon">STREAM</span></h1>
-        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">YT-DLP CORE ENGINE</p>
+        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">HYBRID MANIFEST RESOLVER</p>
         <div class="control-panel">
             <input type="text" id="video-url-input" value="{{ initial_url }}" placeholder="Enter Video URL...">
             <button id="load-btn">STREAM</button>
@@ -67,7 +68,7 @@ HTML_TEMPLATE = """
 
             function playStream(videoUrl) {
                 if (!videoUrl) return;
-                statusBadge.textContent = "Resolving via yt-dlp core...";
+                statusBadge.textContent = "Resolving backend manifest...";
                 statusBadge.style.color = "var(--primary)";
 
                 video.pause();
@@ -81,7 +82,7 @@ HTML_TEMPLATE = """
                 statusBadge.style.color = "#00ff66";
                 
                 video.play().catch(err => {
-                    console.log("Playback interaction deferred.");
+                    console.log("Playback deferred.");
                 });
             }
 
@@ -97,43 +98,52 @@ HTML_TEMPLATE = """
 </html>
 """
 
+def extract_video_id(url):
+    match = re.search(r'(?:dailymotion\.com\/(?:video|embed\/video)\/|dai\.ly\/)([a-zA-Z0-9]+)', url)
+    return match.group(1) if match else None
+
 @app.route('/')
 def home():
     target_url = request.args.get('url', 'https://www.dailymotion.com/video/x9lnilq')
     return render_template_string(HTML_TEMPLATE, initial_url=target_url)
+
 @app.route('/stream-bridge')
 def stream_bridge():
     video_url = request.args.get('url')
     if not video_url:
         return "Missing URL", 400
 
-    # Import the native impersonation object class required by newer yt-dlp versions
-    from yt_dlp.networking.impersonate import ImpersonateTarget
+    video_id = extract_video_id(video_url)
+    if not video_id:
+        return "Invalid Link Structure", 400
 
-    ydl_opts = {
-        'format': 'best',
-        'quiet': True,
-        'no_warnings': True,
-        'allowed_extractors': ['dailymotion', 'generic'],
-        # Force yt-dlp to use the curl_cffi client handler explicitly
-        'extractor_args': {'utils': {'http_backend': ['curl_cffi']}},
-        # Safely convert the string into a valid ImpersonateTarget object
-        'impersonate': ImpersonateTarget.from_str('chrome')
+    # Step 1: Handshake with Dailymotion metadata to fetch the raw direct .m3u8 url
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://www.dailymotion.com/'
     }
-
+    
     try:
+        meta_res = requests.get(f"https://www.dailymotion.com/player/metadata/video/{video_id}", headers=headers, timeout=10)
+        metadata = meta_res.json()
+        master_m3u8_url = metadata['qualities']['auto'][0]['url']
+        
+        # Step 2: Feed the raw, extracted .m3u8 url directly into yt-dlp
+        ydl_opts = {
+            'format': 'best',
+            'quiet': True,
+            'no_warnings': True,
+        }
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
+            # yt-dlp interprets raw .m3u8 urls as direct stream lists natively
+            info = ydl.extract_info(master_m3u8_url, download=False)
             direct_stream_url = info.get('url')
 
         if not direct_stream_url:
             return "Could not resolve stream source url", 500
 
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-            'Accept': '*/*'
-        }
-        
+        # Step 3: Stream the video data through Render
         res = requests.get(direct_stream_url, headers=headers, stream=True, timeout=15)
         
         def pipe_data():
