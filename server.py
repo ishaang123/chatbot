@@ -32,7 +32,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>NEXUS<span class="neon">STREAM</span></h1>
-        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">LIVE TS-MP4 TRANSLATOR</p>
+        <p style="font-size: 0.7rem; opacity: 0.3; letter-spacing: 5px; margin: 10px 0 1rem 0;">NATIVE BYPASS TRANSLATOR</p>
 
         <video id="video-engine" controls playsinline src="/stream-video/{{ active_id }}"></video>
     </div>
@@ -40,7 +40,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# Establish session object with browser headers to prevent 403 errors
+# Maintain full connection lifecycle headers to hold off anti-scraping triggers
 session = requests.Session()
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -53,26 +53,33 @@ session.headers.update({
 def home():
     return render_template_string(HTML_TEMPLATE, active_id="x9lnilq")
 
-# The route rule accepts matching variants to prevent routing 404 errors
+
 @app.route('/stream-video/<video_id>')
 def stream_video(video_id):
     try:
-        # Step 1: Request video configuration data
+        # Step 1: Grab metadata structure using our active session tracking
         meta_url = f"https://www.dailymotion.com/player/metadata/video/{video_id}"
         meta_res = session.get(meta_url, timeout=10)
+        
         if meta_res.status_code != 200:
-            return f"Upstream Token Authorization Rejected.", meta_res.status_code
-        
+            return f"Upstream API Rejected with code: {meta_res.status_code}", 502
+            
         metadata = meta_res.json()
-        master_m3u8_url = metadata['qualities']['auto'][0]['url']
         
-        # Step 2: Grab the master index map text
+        # Exact extraction matching your actual payload payload template
+        try:
+            master_m3u8_url = metadata['qualities']['auto'][0]['url']
+        except (KeyError, IndexError):
+            return "Unable to parse stream manifest from structural map target.", 500
+
+        # Step 2: Grab the master index configuration data
         master_res = session.get(master_m3u8_url, timeout=10)
         master_text = master_res.text
         
         base_url = master_m3u8_url[0:master_m3u8_url.rfind('/')+1]
         target_playlist_url = ""
         
+        # Read down options to pick the target quality lane sub-manifest
         for line in master_text.split('\n'):
             line = line.strip()
             if line and not line.startswith('#'):
@@ -82,7 +89,7 @@ def stream_video(video_id):
         if not target_playlist_url:
             target_playlist_url = master_m3u8_url
             
-        # Step 3: Extract variant chunks from sub-playlist mapping
+        # Step 3: Fetch the sub-playlist holding chunk segment addresses
         playlist_res = session.get(target_playlist_url, timeout=10)
         playlist_text = playlist_res.text
         playlist_base_url = target_playlist_url[0:target_playlist_url.rfind('/')+1]
@@ -94,33 +101,35 @@ def stream_video(video_id):
                 chunk_urls.append(line if line.startswith('http') else playlist_base_url + line)
                 
         if not chunk_urls:
-            return "No accessible media fragments located.", 404
+            return "No stream translation segments located.", 404
 
-        # Step 4: Stream fragments sequentially to the response channel
+        # Step 4: Iterative generator to yield bytes sequentially down the pipe
         def generate_video_stream():
             for url in chunk_urls:
                 try:
-                    # Request individual transport stream components sequentially
-                    chunk_res = session.get(url, stream=True, timeout=10)
+                    # Stream true response chunks sequentially
+                    chunk_res = session.get(url, stream=True, timeout=15)
                     if chunk_res.status_code == 200:
-                        for block in chunk_res.iter_content(chunk_size=32768):
+                        for block in chunk_res.iter_content(chunk_size=65536):
                             yield block
                 except Exception:
-                    continue
+                    continue # Skip segment drops cleanly
 
-        # Use video/mp4 MIME types to enable default media browser components
+        # Crucial Fix: Setting mimetype to video/mp2t (MPEG Transport Stream)
+        # matches the binary formatting of the raw chunks so the video element reads it smoothly
         return Response(
             generate_video_stream(),
-            mimetype="video/mp4",
+            mimetype="video/mp2t",
             headers={
                 "Access-Control-Allow-Origin": "*",
-                "Content-Type": "video/mp4",
+                "Content-Type": "video/mp2t",
                 "Accept-Ranges": "bytes"
             }
         )
         
     except Exception as e:
-        return f"Stream Generator Fault: {str(e)}", 500
+        return f"Stream Core Error Trace: {str(e)}", 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
