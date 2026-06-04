@@ -1,5 +1,6 @@
 import os
 import re
+import urllib.parse
 import requests
 from flask import Flask, request, jsonify, render_template_string, Response
 
@@ -79,7 +80,7 @@ HTML_TEMPLATE = """
             function playStream(videoUrl) {
                 if (!videoUrl) return;
 
-                statusBadge.textContent = "Fetching Proxied Stream Manifest...";
+                statusBadge.textContent = "Syncing Token IP Handshake...";
                 statusBadge.style.color = "var(--primary)";
 
                 if (hlsInstance) {
@@ -90,37 +91,37 @@ HTML_TEMPLATE = """
                 video.removeAttribute('src');
                 video.load();
 
-                fetch(`/get-stream-manifest?url=${encodeURIComponent(videoUrl)}`)
+                const targetUrl = `/fetch-stream?url=${encodeURIComponent(videoUrl)}&type=meta`;
+
+                fetch(targetUrl)
                     .then(response => {
-                        if (!response.ok) throw new Error("Server rejected stream proxy token configuration.");
+                        if (!response.ok) throw new Error("Stream compilation dropped.");
                         return response.json();
                     })
                     .then(data => {
-                        const manifestUrl = data.stream_url;
-                        statusBadge.textContent = "Synchronized. Streaming via Proxy Tunnel...";
+                        const proxiedManifestUrl = data.stream_url;
+
+                        statusBadge.textContent = "IP Synchronized. Tunneling Video Tracks...";
                         statusBadge.style.color = "#00ff66";
 
                         if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                            video.src = manifestUrl;
+                            video.src = proxiedManifestUrl;
                             video.play().catch(() => {});
                         } 
                         else if (Hls.isSupported()) {
                             hlsInstance = new Hls({
                                 maxBufferSize: 20 * 1024 * 1024
                             });
-                            hlsInstance.loadSource(manifestUrl);
+                            hlsInstance.loadSource(proxiedManifestUrl);
                             hlsInstance.attachMedia(video);
                             hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
                                 video.play().catch(() => {});
                             });
-                        } else {
-                            statusBadge.textContent = "Error: Browser missing streaming engines.";
-                            statusBadge.style.color = "#ff3333";
                         }
                     })
                     .catch(err => {
                         console.error(err);
-                        statusBadge.textContent = "Fault: Stream compilation dropped.";
+                        statusBadge.textContent = "Fault: Security verification dropped.";
                         statusBadge.style.color = "#ff3333";
                     });
             }
@@ -137,16 +138,9 @@ HTML_TEMPLATE = """
 </html>
 """
 
-session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Referer': 'https://www.dailymotion.com/',
-    'Accept': '*/*'
-})
-
 
 def extract_video_id(url):
-    match = re.search(r'(?:dailymotion\.com/(?:video|embed/video)/|dai\.ly/)([a-zA-Z0-9]+)', url)
+    match = re.search(r'(?:dailymotion\.com\/(?:video|embed\/video)\/|dai\.ly\/)([a-zA-Z0-9]+)', url)
     return match.group(1) if match else None
 
 
@@ -156,54 +150,105 @@ def home():
     return render_template_string(HTML_TEMPLATE, initial_url=target_url)
 
 
-@app.route('/get-stream-manifest')
-def get_stream_manifest():
-    try:
-        video_url = request.args.get('url')
-        if not video_url:
-            return jsonify({"error": "No URL provided"}), 400
-
-        video_id = extract_video_id(video_url)
-        if not video_id:
-            return jsonify({"error": "Could not extract video ID"}), 400
-
-        meta_url = f"https://www.dailymotion.com/player/metadata/video/{video_id}"
-        meta_res = session.get(meta_url, timeout=10)
-        if meta_res.status_code != 200:
-            return jsonify({"error": f"Upstream Token Error: {meta_res.status_code}"}), 502
-
-        metadata = meta_res.json()
-        master_playlist_url = metadata['qualities']['auto'][0]['url']
-
-        # Routes the frontend to request data via our proxy endpoint
-        proxied_url = f"/proxy-stream?url={requests.utils.quote(master_playlist_url)}"
-
-        return jsonify({
-            "status": "success",
-            "stream_url": proxied_url
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/proxy-stream')
-def proxy_stream():
-    """Proxies the playlist text data through the backend session to resolve headers and CORS."""
+@app.route('/fetch-stream')
+def fetch_stream():
     target_url = request.args.get('url')
+    req_type = request.args.get('type', 'chunk')
+
+    # Context survival parameter for underlying fragments
+    fallback_base = request.args.get('base_url', '')
+
     if not target_url:
-        return "Missing URL parameter", 400
+        return "Missing Target Resource URL", 400
+
+    # Reconstruct root relative addresses if they escape client side mapping
+    if target_url.startswith('/') and not target_url.startswith('//') and fallback_base:
+        target_url = urllib.parse.urljoin(fallback_base, target_url)
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': 'https://www.dailymotion.com/',
+        'Accept': '*/*'
+    }
+
+    user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if user_ip:
+        headers['X-Forwarded-For'] = user_ip.split(',')[0].strip()
+        headers['Client-IP'] = headers['X-Forwarded-For']
 
     try:
-        response = session.get(target_url, timeout=10)
-        return Response(
-            response.text,
-            status=response.status_code,
-            content_type='application/vnd.apple.mpegurl'
-        )
+        if req_type == 'meta':
+            video_id = extract_video_id(target_url)
+            if not video_id:
+                return jsonify({"error": "Invalid Video Link Structure"}), 400
+
+            meta_res = requests.get(f"https://www.dailymotion.com/player/metadata/video/{video_id}", headers=headers,
+                                    timeout=10)
+            metadata = meta_res.json()
+            master_url = metadata['qualities']['auto'][0]['url']
+
+            encoded_url = urllib.parse.quote(master_url)
+            return jsonify({
+                "status": "success",
+                "stream_url": f"/fetch-stream?url={encoded_url}&type=playlist"
+            })
+
+        elif req_type == 'playlist':
+            res = requests.get(target_url, headers=headers, timeout=10)
+            lines = res.text.splitlines()
+            rewritten_lines = []
+
+            # Save the true remote host origin to resolve sub-items later
+            parsed_origin = urllib.parse.urlparse(target_url)
+            base_origin_url = f"{parsed_origin.scheme}://{parsed_origin.netloc}"
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                if line.startswith('#'):
+                    rewritten_lines.append(line)
+                    continue
+
+                # Form fully qualified URLs immediately
+                absolute_url = urllib.parse.urljoin(target_url, line)
+                encoded_line = urllib.parse.quote(absolute_url)
+                encoded_origin = urllib.parse.quote(base_origin_url)
+
+                if '.m3u8' in line:
+                    next_type = "playlist"
+                else:
+                    next_type = "chunk"
+
+                # Append absolute local proxy routes with context trackers
+                local_proxy_route = f"/fetch-stream?url={encoded_line}&type={next_type}&base_url={encoded_origin}"
+                rewritten_lines.append(local_proxy_route)
+
+            return Response(
+                "\n".join(rewritten_lines),
+                content_type='application/vnd.apple.mpegurl',
+                headers={'Access-Control-Allow-Origin': '*'}
+            )
+
+        else:
+            res = requests.get(target_url, headers=headers, stream=True, timeout=10)
+
+            def generate_chunks():
+                for chunk in res.iter_content(chunk_size=8192):
+                    yield chunk
+
+            return Response(
+                generate_chunks(),
+                status=res.status_code,
+                content_type=res.headers.get('Content-Type', 'video/mp2t'),
+                headers={'Access-Control-Allow-Origin': '*'}
+            )
+
     except Exception as e:
         return str(e), 500
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
