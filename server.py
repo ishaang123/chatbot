@@ -7,7 +7,77 @@ import requests
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
+INDEX_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NebulaView Engine Core</title>
+    <style>
+        body {
+            background-color: #09090b;
+            color: #f4f4f5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            max-width: 500px;
+            text-align: center;
+            padding: 40px;
+            background: rgba(15, 15, 20, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #ff0055, #6366f1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 1px;
+        }
+        p {
+            color: #a1a1aa;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+        }
+        .warning {
+            display: inline-block;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NebulaView Mobile</h1>
+        <p>This server functions exclusively as the back-end streaming route environment for our players. Manual configuration requests or direct interactions are restricted.</p>
+        <div class="warning">Please do not use this route! Resulting so will result in not only an IP ban from NebulaVideo services, but as well as from our homepage! </div>
+    </div>
+</body>
+</html>
+"""
 
+@app.route('/')
+def index():
+    return render_template_string(INDEX_TEMPLATE)
 PLAYER_TEMPLATE = """
 <html lang="en">
 <head>
