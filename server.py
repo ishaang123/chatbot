@@ -9,442 +9,223 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 app = Flask(__name__)
 
 PLAYER_TEMPLATE = """
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
         /* ==========================================================================
-           1. CORE CANVAS ARCHITECTURE
+           1. IMMERSIVE CANVAS AND ENGINE WRAPPERS
            ========================================================================== */
-        html, body {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            background-color: #030303; overflow: hidden;
+        html, body { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            background-color: #030303; overflow: hidden; 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .video-wrapper { 
+            position: relative; width: 100%; height: 100%; 
             display: flex; justify-content: center; align-items: center;
         }
 
-        :root {
-            --brand-accent: #ff0055;
-            --brand-gradient: linear-gradient(90deg, #6366f1, #ff0055);
-            --glass-bg: rgba(15, 15, 24, 0.45);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --glass-glow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        .video-js { 
+            width: 100% !important; height: 100% !important; 
+            background-color: #000 !important;
         }
-
-        /* Video Workspace Container */
-        .custom-player-wrapper {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            max-width: 100%;
-            max-height: 100%;
-            background-color: #000;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        video {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            cursor: pointer;
-        }
-
-        /* Hide native player controls universally */
-        video::-webkit-media-controls { display: none !important; }
 
         /* ==========================================================================
            2. PREMIUM THEMED NEON LOADER OVERLAY
            ========================================================================== */
         #video-loader {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #09090b; z-index: 5;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #09090b; z-index: 9999; 
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            transition: opacity 0.4s ease;
+            transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
             pointer-events: none;
         }
 
+        .spinner-box {
+            position: relative; width: 64px; height: 64px;
+            display: flex; justify-content: center; align-items: center;
+        }
+
         .spinner {
-            box-sizing: border-box; width: 64px; height: 64px;
+            box-sizing: border-box; width: 100%; height: 100%;
             border: 4px solid rgba(99, 102, 241, 0.1);
-            border-top: 4px solid #6366f1;
+            border-top: 4px solid #6366f1; /* Matched to main brand purple */
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .loader-text {
+        .loader-text { 
             margin-top: 22px; font-size: 0.8rem; font-weight: 600;
             color: #ffffff; letter-spacing: 2px; text-transform: uppercase;
             text-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+            animation: pulse 1.5s ease-in-out infinite;
+            opacity: 0.8;
         }
 
+        @keyframes pulse { 50% { opacity: 0.3; } }
+
         /* ==========================================================================
-           3. HIGH-END GLASSMORPHISM UI CONTROLS
+           3. COMPLETE PREMIUM VIDEO.JS SKIN OVERRIDES (GLASSMORPHISM)
            ========================================================================== */
-        .ui-controls-panel {
-            position: absolute;
-            bottom: 24px; left: 24px;
-            width: calc(100% - 48px);
-            box-sizing: border-box;
-            background: var(--glass-bg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+        /* Custom UI Variables Matrix */
+        :root {
+            --brand-accent: #ff0055;       /* Neon Magenta Highlight */
+            --glass-bg: rgba(15, 15, 20, 0.6); /* Matte semi-transparent blur bar */
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        /* The Big Play Button Centerpiece Upgrade */
+        .video-js .vjs-big-play-button {
+            background: linear-gradient(135deg, rgba(255, 0, 85, 0.8), rgba(99, 102, 241, 0.8)) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border-radius: 50% !important;
+            width: 76px !important; height: 76px !important;
+            line-height: 74px !important;
+            margin-top: -38px !important; margin-left: -38px !important;
+            box-shadow: 0 8px 32px rgba(255, 0, 85, 0.3) !important;
+            backdrop-filter: blur(4px);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease !important;
+        }
+
+        .video-js:hover .vjs-big-play-button {
+            transform: scale(1.1);
+            box-shadow: 0 12px 40px rgba(255, 0, 85, 0.5) !important;
+            background: linear-gradient(135deg, #ff0055, #6366f1) !important;
+        }
+
+        /* Floating Modern Control Bar Glass Panel */
+        .video-js .vjs-control-bar {
+            background: var(--glass-bg) !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
             border: 1px solid var(--glass-border);
-            border-radius: 16px;
-            padding: 12px 18px;
-            box-shadow: var(--glass-glow);
-            z-index: 3;
-            opacity: 1;
-            transform: translateY(0);
-            transition: opacity 0.3s cubic-bezier(0.25, 1, 0.5, 1), transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            border-radius: 16px !important;
+            width: calc(100% - 32px) !important;
+            height: 54px !important;
+            bottom: 16px !important; left: 16px !important;
+            padding: 0 8px !important;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5) !important;
+            box-sizing: border-box !important;
+            transition: opacity 0.3s, transform 0.3s !important;
         }
 
-        /* Auto-hide panel layout state */
-        .custom-player-wrapper.user-inactive .ui-controls-panel {
-            opacity: 0;
-            transform: translateY(12px);
-            cursor: none;
+        /* Smooth Hide/Show Transition Shifts when controls disappear */
+        .video-js.vjs-user-inactive .vjs-control-bar {
+            transform: translateY(10px);
         }
 
-        .controls-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
+        /* Icon Controls Padding Adjustment */
+        .video-js .vjs-control {
+            width: 44px !important;
+            height: 100% !important;
+        }
+        .video-js .vjs-button > .vjs-icon-placeholder:before {
+            line-height: 54px !important;
+            font-size: 1.8em !important;
         }
 
-        .controls-cluster {
-            display: flex;
-            align-items: center;
-            gap: 14px;
+        /* Sleek Neon Progress Tracker Base Track */
+        .video-js .vjs-progress-control {
+            position: absolute !important;
+            width: calc(100% - 32px) !important;
+            height: 5px !important;
+            top: -5px !important; left: 16px !important;
         }
 
-        /* Universal Clean Icon Buttons */
-        .control-btn {
-            background: none;
-            border: none;
-            color: #f4f4f5;
-            cursor: pointer;
-            padding: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.15s ease, color 0.15s ease;
+        .video-js .vjs-progress-holder {
+            height: 100% !important;
+            margin: 0 !important;
+            background: rgba(255, 255, 255, 0.1) !important;
+            border-radius: 3px !important;
         }
 
-        .control-btn:hover {
-            color: #ffffff;
-            transform: scale(1.08);
+        /* Play Progress Filled Glow Line */
+        .video-js .vjs-play-progress {
+            background: linear-gradient(90deg, #6366f1, var(--brand-accent)) !important;
+            border-radius: 3px !important;
+        }
+        .video-js .vjs-play-progress:before {
+            display: none !important; /* Clears original oversized progress circle node */
         }
 
-        .control-btn svg {
-            width: 22px;
-            height: 22px;
-            fill: currentColor;
+        /* Hover Load Buffer Line */
+        .video-js .vjs-load-progress {
+            background: rgba(255, 255, 255, 0.15) !important;
+            border-radius: 3px !important;
         }
 
-        /* Time Text Readout Settings */
-        .time-display {
-            color: #d4d4d8;
-            font-size: 0.85rem;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            user-select: none;
+        /* Time Displays Vertical Centering Layout */
+        .video-js .vjs-time-control {
+            line-height: 54px !important;
+            padding: 0 6px !important;
+            font-size: 0.9rem !important;
+            font-weight: 500 !important;
+            color: #d4d4d8 !important;
         }
-
-        /* ==========================================================================
-           4. CUSTOM TIMELINE PROGRESS SLIDER TRACKS
-           ========================================================================== */
-        .timeline-container {
-            width: 100%;
-            position: relative;
-            cursor: pointer;
-            height: 6px;
-            display: flex;
-            align-items: center;
+        
+        /* Volume Bar Component Styling */
+        .video-js .vjs-volume-bar {
+            margin: 23px 5px !important;
         }
-
-        .timeline-bar {
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.12);
-            border-radius: 4px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .play-progress {
-            height: 100%;
-            width: 0%;
-            background: var(--brand-gradient);
-            border-radius: 4px;
-            position: absolute;
-            top: 0; left: 0;
-        }
-
-        /* ==========================================================================
-           5. SLICK HOVER VOLUME CONTROLLER PANEL
-           ========================================================================== */
-        .volume-panel {
-            display: flex;
-            align-items: center;
-            gap: 0;
-            overflow: hidden;
-            transition: gap 0.2s ease;
-        }
-
-        .volume-slider-wrapper {
-            width: 0;
-            opacity: 0;
-            display: flex;
-            align-items: center;
-            transition: width 0.25s ease, opacity 0.2s ease;
-        }
-
-        .volume-panel:hover .volume-slider-wrapper,
-        .volume-panel:focus-within .volume-slider-wrapper {
-            width: 70px;
-            opacity: 1;
-        }
-
-        .volume-panel:hover { gap: 6px; }
-
-        input[type="range"].volume-slider {
-            -webkit-appearance: none;
-            width: 100%;
-            background: transparent;
-            cursor: pointer;
-        }
-
-        input[type="range"].volume-slider:focus { outline: none; }
-
-        input[type="range"].volume-slider::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
-        }
-
-        input[type="range"].volume-slider::-webkit-slider-thumb {
-            height: 12px;
-            width: 12px;
-            border-radius: 50%;
-            background: #ffffff;
-            -webkit-appearance: none;
-            margin-top: -4px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        .video-js .vjs-volume-level {
+            background: #fff !important;
         }
     </style>
 </head>
 <body>
 
-    <div class="custom-player-wrapper" id="player-container">
+    <div class="video-wrapper">
         <div id="video-loader">
-            <div class="spinner"></div>
+            <div class="spinner-box">
+                <div class="spinner"></div>
+            </div>
             <div class="loader-text">Decrypting Stream Matrix</div>
         </div>
 
-        <video id="video-engine" playsinline>
+        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
             <source src="/manifest?url={{ target_url | urlencode }}" type="application/x-mpegURL">
-            <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
         </video>
-
-        <div class="ui-controls-panel">
-            <div class="timeline-container" id="timeline-box">
-                <div class="timeline-bar">
-                    <div class="play-progress" id="progress-line"></div>
-                </div>
-            </div>
-
-            <div class="controls-row">
-                <div class="controls-cluster">
-                    <button class="control-btn" id="play-pause-btn" title="Toggle Playback">
-                        <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
-                        <svg viewBox="0 0 24 24" id="pause-icon" style="display: none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                    </button>
-
-                    <div class="time-display">
-                        <span id="current-time-string">0:00</span> / <span id="duration-time-string">0:00</span>
-                    </div>
-                </div>
-
-                <div class="controls-cluster">
-                    <div class="volume-panel">
-                        <button class="control-btn" id="mute-btn" title="Mute/Unmute">
-                            <svg viewBox="0 0 24 24" id="vol-high-icon"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
-                            <svg viewBox="0 0 24 24" id="vol-mute-icon" style="display: none;"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.21.05-.42.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
-                        </button>
-                        <div class="volume-slider-wrapper">
-                            <input type="range" class="volume-slider" id="volume-range" min="0" max="1" step="0.05" value="1">
-                        </div>
-                    </div>
-
-                    <button class="control-btn" id="fullscreen-btn" title="Toggle Fullscreen">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
-                    </button>
-                </div>
-            </div>
-        </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+    <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const container = document.getElementById('player-container');
-            const video = document.getElementById('video-engine');
-            const loader = document.getElementById('video-loader');
-            
-            // Custom UI Elements Map
-            const playPauseBtn = document.getElementById('play-pause-btn');
-            const playIcon = document.getElementById('play-icon');
-            const pauseIcon = document.getElementById('pause-icon');
-            const currentTimeStr = document.getElementById('current-time-string');
-            const durationTimeStr = document.getElementById('duration-time-string');
-            const timelineBox = document.getElementById('timeline-box');
-            const progressLine = document.getElementById('progress-line');
-            const muteBtn = document.getElementById('mute-btn');
-            const volHighIcon = document.getElementById('vol-high-icon');
-            const volMuteIcon = document.getElementById('vol-mute-icon');
-            const volumeRange = document.getElementById('volume-range');
-            const fullscreenBtn = document.getElementById('fullscreen-btn');
+        document.addEventListener("DOMContentLoaded", function() {
+            // High Speed Adaptive Preloading Configuration Setup Parameters
+            const player = videojs('my-video', {
+                preload: 'auto',
+                autoplay: true,
+                controls: true,
+                fluid: false, 
+                inactivityTimeout: 2000, // Time in ms before the control panel beautifully floats away
+                html5: {
+                    vhs: {
+                        overrideNative: true,
+                        maxBufferLength: 45, // Heavy media segments layout caching boundaries
+                        liveBufferLength: 12
+                    }
+                }
+            });
 
-            /* ==========================================================================
-               STREAM PROTOCOL CAPTURE ENGINE (HLS CONFIG)
-               ========================================================================== */
-            const manifestUrl = video.querySelector('source').src;
-            
-            if (Hls.isSupported() && manifestUrl.includes('manifest')) {
-                const hls = new Hls({ maxBufferLength: 45 });
-                hls.loadSource(manifestUrl);
-                hls.attachMedia(video);
-            } else if (video.canPlayType('application/x-mpegURL')) {
-                // Native Safari fallback initialization configuration array
-                video.src = manifestUrl;
-            }
-
-            // Remove loading matrix shroud shield as soon as media frame data matches pipeline pipeline
-            video.addEventListener('canplay', () => {
-                if(loader) {
+            // Fast event hook pipeline sequence to drop loader panel
+            player.on('canplay', function() {
+                const loader = document.getElementById('video-loader');
+                if (loader) {
                     loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 400);
+                    setTimeout(() => loader.remove(), 400); // Completely destroy node layer block
                 }
+                player.play().catch(() => {
+                    // Fail-safe programmatic fallback activation switch
+                    player.muted(true);
+                    player.play();
+                });
             });
-
-            /* ==========================================================================
-               CORE CORE INTERACTIVE FUNCTIONALITY MATRIX
-               ========================================================================== */
-            
-            // Play/Pause Action Switches
-            function togglePlay() {
-                if (video.paused) {
-                    video.play().catch(() => {
-                        video.muted = true;
-                        video.play();
-                    });
-                } else {
-                    video.pause();
-                }
-            }
-
-            video.addEventListener('click', togglePlay);
-            playPauseBtn.addEventListener('click', togglePlay);
-
-            video.addEventListener('play', () => {
-                playIcon.style.display = 'none';
-                pauseIcon.style.display = 'block';
-            });
-
-            video.addEventListener('pause', () => {
-                playIcon.style.display = 'block';
-                pauseIcon.style.display = 'none';
-            });
-
-            // Clean Time Value Conversions Tool
-            function formatTimeCode(seconds) {
-                if (isNaN(seconds)) return "0:00";
-                const mins = Math.floor(seconds / 60);
-                const secs = Math.floor(seconds % 60);
-                return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-            }
-
-            // Update Time Indicators and Timeline Line Progress Percentage Maps
-            video.addEventListener('timeupdate', () => {
-                currentTimeStr.textContent = formatTimeCode(video.currentTime);
-                const progressPct = (video.currentTime / video.duration) * 100;
-                progressLine.style.width = `${progressPct}%`;
-            });
-
-            video.addEventListener('loadedmetadata', () => {
-                durationTimeStr.textContent = formatTimeCode(video.duration);
-            });
-
-            // Seek functionality through timeline track coordinates
-            timelineBox.addEventListener('click', (e) => {
-                const rect = timelineBox.getBoundingClientRect();
-                const clickPosition = (e.clientX - rect.left) / rect.width;
-                video.currentTime = clickPosition * video.duration;
-            });
-
-            // Volume Modulating Controls API
-            volumeRange.addEventListener('input', (e) => {
-                video.volume = e.target.value;
-                video.muted = (e.target.value == 0);
-                updateVolumeAppearance();
-            });
-
-            muteBtn.addEventListener('click', () => {
-                video.muted = !video.muted;
-                updateVolumeAppearance();
-            });
-
-            function updateVolumeAppearance() {
-                if (video.muted || video.volume === 0) {
-                    volHighIcon.style.display = 'none';
-                    volMuteIcon.style.display = 'block';
-                    volumeRange.value = 0;
-                } else {
-                    volHighIcon.style.display = 'block';
-                    volMuteIcon.style.display = 'none';
-                    volumeRange.value = video.volume;
-                }
-            }
-
-            // High-Performance Fullscreen toggle module sequence array execution platform
-            fullscreenBtn.addEventListener('click', () => {
-                if (!document.fullscreenElement) {
-                    container.requestFullscreen().catch(err => console.log(err));
-                } else {
-                    document.exitFullscreen();
-                }
-            });
-
-            /* ==========================================================================
-               SEAMLESS CONTROL PANEL AUTO-HIDING SYSTEM
-               ========================================================================== */
-            let activeTimer;
-            function displayControlsTemporarily() {
-                container.classList.remove('user-inactive');
-                clearTimeout(activeTimer);
-                if (!video.paused) {
-                    activeTimer = setTimeout(() => {
-                        container.classList.add('user-inactive');
-                    }, 2500); // UI bar floats away cleanly after 2.5 seconds of immobility
-                }
-            }
-
-            container.addEventListener('mousemove', displayControlsTemporarily);
-            video.addEventListener('play', displayControlsTemporarily);
-            video.addEventListener('pause', () => container.classList.remove('user-inactive'));
         });
     </script>
 </body>
