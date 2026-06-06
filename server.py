@@ -9,7 +9,6 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 app = Flask(__name__)
 
 PLAYER_TEMPLATE = """
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -17,10 +16,12 @@ PLAYER_TEMPLATE = """
     <title>{{ title }}</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
-        /* Immersive True Fullscreen Cinema Styling */
+        /* ==========================================================================
+           1. IMMERSIVE CANVAS AND ENGINE WRAPPERS
+           ========================================================================== */
         html, body { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
-            background-color: #000; overflow: hidden; 
+            background-color: #030303; overflow: hidden; 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
@@ -29,17 +30,20 @@ PLAYER_TEMPLATE = """
             display: flex; justify-content: center; align-items: center;
         }
 
-        /* Forces Video.js player component to natively cover 100% viewport dimensions */
         .video-js { 
             width: 100% !important; height: 100% !important; 
+            background-color: #000 !important;
         }
 
-        /* Modernized Minimalist Neon Loader Screen overlay */
+        /* ==========================================================================
+           2. PREMIUM THEMED NEON LOADER OVERLAY
+           ========================================================================== */
         #video-loader {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            background: #0a0a0a; z-index: 9999; 
+            background: #09090b; z-index: 9999; 
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            transition: opacity 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            pointer-events: none;
         }
 
         .spinner-box {
@@ -49,22 +53,130 @@ PLAYER_TEMPLATE = """
 
         .spinner {
             box-sizing: border-box; width: 100%; height: 100%;
-            border: 4px solid rgba(255, 0, 85, 0.1);
-            border-top: 4px solid #ff0055;
+            border: 4px solid rgba(99, 102, 241, 0.1);
+            border-top: 4px solid #6366f1; /* Matched to main brand purple */
             border-radius: 50%;
-            animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            animation: spin 0.8s linear infinite;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
         .loader-text { 
-            margin-top: 20px; font-size: 1rem; font-weight: 500;
-            color: #ffffff; letter-spacing: 1.5px; text-transform: uppercase;
-            text-shadow: 0 0 10px rgba(255, 0, 85, 0.4);
+            margin-top: 22px; font-size: 0.8rem; font-weight: 600;
+            color: #ffffff; letter-spacing: 2px; text-transform: uppercase;
+            text-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
             animation: pulse 1.5s ease-in-out infinite;
+            opacity: 0.8;
         }
 
-        @keyframes pulse { 50% { opacity: 0.5; } }
+        @keyframes pulse { 50% { opacity: 0.3; } }
+
+        /* ==========================================================================
+           3. COMPLETE PREMIUM VIDEO.JS SKIN OVERRIDES (GLASSMORPHISM)
+           ========================================================================== */
+        /* Custom UI Variables Matrix */
+        :root {
+            --brand-accent: #ff0055;       /* Neon Magenta Highlight */
+            --glass-bg: rgba(15, 15, 20, 0.6); /* Matte semi-transparent blur bar */
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        /* The Big Play Button Centerpiece Upgrade */
+        .video-js .vjs-big-play-button {
+            background: linear-gradient(135deg, rgba(255, 0, 85, 0.8), rgba(99, 102, 241, 0.8)) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border-radius: 50% !important;
+            width: 76px !important; height: 76px !important;
+            line-height: 74px !important;
+            margin-top: -38px !important; margin-left: -38px !important;
+            box-shadow: 0 8px 32px rgba(255, 0, 85, 0.3) !important;
+            backdrop-filter: blur(4px);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease !important;
+        }
+
+        .video-js:hover .vjs-big-play-button {
+            transform: scale(1.1);
+            box-shadow: 0 12px 40px rgba(255, 0, 85, 0.5) !important;
+            background: linear-gradient(135deg, #ff0055, #6366f1) !important;
+        }
+
+        /* Floating Modern Control Bar Glass Panel */
+        .video-js .vjs-control-bar {
+            background: var(--glass-bg) !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            border: 1px solid var(--glass-border);
+            border-radius: 16px !important;
+            width: calc(100% - 32px) !important;
+            height: 54px !important;
+            bottom: 16px !important; left: 16px !important;
+            padding: 0 8px !important;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5) !important;
+            box-sizing: border-box !important;
+            transition: opacity 0.3s, transform 0.3s !important;
+        }
+
+        /* Smooth Hide/Show Transition Shifts when controls disappear */
+        .video-js.vjs-user-inactive .vjs-control-bar {
+            transform: translateY(10px);
+        }
+
+        /* Icon Controls Padding Adjustment */
+        .video-js .vjs-control {
+            width: 44px !important;
+            height: 100% !important;
+        }
+        .video-js .vjs-button > .vjs-icon-placeholder:before {
+            line-height: 54px !important;
+            font-size: 1.8em !important;
+        }
+
+        /* Sleek Neon Progress Tracker Base Track */
+        .video-js .vjs-progress-control {
+            position: absolute !important;
+            width: calc(100% - 32px) !important;
+            height: 5px !important;
+            top: -5px !important; left: 16px !important;
+        }
+
+        .video-js .vjs-progress-holder {
+            height: 100% !important;
+            margin: 0 !important;
+            background: rgba(255, 255, 255, 0.1) !important;
+            border-radius: 3px !important;
+        }
+
+        /* Play Progress Filled Glow Line */
+        .video-js .vjs-play-progress {
+            background: linear-gradient(90deg, #6366f1, var(--brand-accent)) !important;
+            border-radius: 3px !important;
+        }
+        .video-js .vjs-play-progress:before {
+            display: none !important; /* Clears original oversized progress circle node */
+        }
+
+        /* Hover Load Buffer Line */
+        .video-js .vjs-load-progress {
+            background: rgba(255, 255, 255, 0.15) !important;
+            border-radius: 3px !important;
+        }
+
+        /* Time Displays Vertical Centering Layout */
+        .video-js .vjs-time-control {
+            line-height: 54px !important;
+            padding: 0 6px !important;
+            font-size: 0.9rem !important;
+            font-weight: 500 !important;
+            color: #d4d4d8 !important;
+        }
+        
+        /* Volume Bar Component Styling */
+        .video-js .vjs-volume-bar {
+            margin: 23px 5px !important;
+        }
+        .video-js .vjs-volume-level {
+            background: #fff !important;
+        }
     </style>
 </head>
 <body>
@@ -74,7 +186,7 @@ PLAYER_TEMPLATE = """
             <div class="spinner-box">
                 <div class="spinner"></div>
             </div>
-            <div class="loader-text">Streaming Buffer Connecting</div>
+            <div class="loader-text">Decrypting Stream Matrix</div>
         </div>
 
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
@@ -85,31 +197,31 @@ PLAYER_TEMPLATE = """
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // High Speed Adaptive Preloading configuration parameters 
+            // High Speed Adaptive Preloading Configuration Setup Parameters
             const player = videojs('my-video', {
                 preload: 'auto',
                 autoplay: true,
                 controls: true,
-                fluid: false, // Turned off to prevent aspect ratio window restrictions
-                inactivityTimeout: 1500,
+                fluid: false, 
+                inactivityTimeout: 2000, // Time in ms before the control panel beautifully floats away
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 45, // Expanded caching boundaries for zero buffering lag
+                        maxBufferLength: 45, // Heavy media segments layout caching boundaries
                         liveBufferLength: 12
                     }
                 }
             });
 
-            // Instantaneous Drop-out hook to drop loader elements fast
+            // Fast event hook pipeline sequence to drop loader panel
             player.on('canplay', function() {
                 const loader = document.getElementById('video-loader');
                 if (loader) {
                     loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 300); // Demolish from DOM to save browser GPU memory
+                    setTimeout(() => loader.remove(), 400); // Completely destroy node layer block
                 }
                 player.play().catch(() => {
-                    // Fail-safe protection switch if system autoplay block rules restrict first load chimes
+                    // Fail-safe programmatic fallback activation switch
                     player.muted(true);
                     player.play();
                 });
