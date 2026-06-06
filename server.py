@@ -9,6 +9,7 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 app = Flask(__name__)
 
 PLAYER_TEMPLATE = """
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -54,7 +55,7 @@ PLAYER_TEMPLATE = """
         .spinner {
             box-sizing: border-box; width: 100%; height: 100%;
             border: 4px solid rgba(99, 102, 241, 0.1);
-            border-top: 4px solid #6366f1; /* Matched to main brand purple */
+            border-top: 4px solid #6366f1; 
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
@@ -72,110 +73,141 @@ PLAYER_TEMPLATE = """
         @keyframes pulse { 50% { opacity: 0.3; } }
 
         /* ==========================================================================
-           3. COMPLETE PREMIUM VIDEO.JS SKIN OVERRIDES (GLASSMORPHISM)
+           3. MOVIE THEATER GLASSMORPHISM SKIN OVERRIDES
            ========================================================================== */
-        /* Custom UI Variables Matrix */
         :root {
-            --brand-accent: #ff0055;       /* Neon Magenta Highlight */
-            --glass-bg: rgba(15, 15, 20, 0.6); /* Matte semi-transparent blur bar */
+            --brand-accent: #ff0055;       
+            --glass-bg: rgba(15, 15, 20, 0.75); 
             --glass-border: rgba(255, 255, 255, 0.08);
         }
 
-        /* The Big Play Button Centerpiece Upgrade */
+        /* Center Play Button Upgrade */
         .video-js .vjs-big-play-button {
-            background: linear-gradient(135deg, rgba(255, 0, 85, 0.8), rgba(99, 102, 241, 0.8)) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            background: linear-gradient(135deg, rgba(255, 0, 85, 0.85), rgba(99, 102, 241, 0.85)) !important;
+            border: 1px solid rgba(255, 255, 255, 0.25) !important;
             border-radius: 50% !important;
-            width: 76px !important; height: 76px !important;
-            line-height: 74px !important;
-            margin-top: -38px !important; margin-left: -38px !important;
-            box-shadow: 0 8px 32px rgba(255, 0, 85, 0.3) !important;
-            backdrop-filter: blur(4px);
+            width: 80px !important; height: 80px !important;
+            line-height: 78px !important;
+            box-shadow: 0 12px 40px rgba(255, 0, 85, 0.4) !important;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease !important;
         }
 
         .video-js:hover .vjs-big-play-button {
-            transform: scale(1.1);
-            box-shadow: 0 12px 40px rgba(255, 0, 85, 0.5) !important;
-            background: linear-gradient(135deg, #ff0055, #6366f1) !important;
+            transform: scale(1.1) translate(-45%, -45%); /* Corrects default videojs absolute offset math */
+            box-shadow: 0 16px 48px rgba(255, 0, 85, 0.6) !important;
         }
 
-        /* Floating Modern Control Bar Glass Panel */
+        /* Floating Control Panel Layout */
         .video-js .vjs-control-bar {
             background: var(--glass-bg) !important;
-            backdrop-filter: blur(20px) !important;
-            -webkit-backdrop-filter: blur(20px) !important;
+            backdrop-filter: blur(24px) !important;
+            -webkit-backdrop-filter: blur(24px) !important;
             border: 1px solid var(--glass-border);
             border-radius: 16px !important;
-            width: calc(100% - 32px) !important;
-            height: 54px !important;
-            bottom: 16px !important; left: 16px !important;
-            padding: 0 8px !important;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5) !important;
-            box-sizing: border-box !important;
-            transition: opacity 0.3s, transform 0.3s !important;
+            width: calc(100% - 40px) !important;
+            height: 60px !important;
+            bottom: 20px !important; left: 20px !important;
+            padding: 0 12px !important;
+            box-shadow: 0 24px 50px rgba(0, 0, 0, 0.6) !important;
+            display: flex !important;
+            align-items: center !important;
+            transition: opacity 0.3s elements, transform 0.3s cubic-bezier(0.25, 1, 0.5, 1) !important;
         }
 
-        /* Smooth Hide/Show Transition Shifts when controls disappear */
+        /* Smooth slide-down when inactive */
         .video-js.vjs-user-inactive .vjs-control-bar {
-            transform: translateY(10px);
+            transform: translateY(15px);
+            opacity: 0;
         }
 
-        /* Icon Controls Padding Adjustment */
+        /* Structural Adjustments for Video.JS Layout Grid */
         .video-js .vjs-control {
-            width: 44px !important;
             height: 100% !important;
+            width: 48px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
+
         .video-js .vjs-button > .vjs-icon-placeholder:before {
-            line-height: 54px !important;
+            position: relative !important;
+            text-align: center !important;
+            line-height: 60px !important;
+            height: 100% !important;
+            width: 100% !important;
             font-size: 1.8em !important;
         }
 
-        /* Sleek Neon Progress Tracker Base Track */
+        /* Cleaned, Flex-based Fluid Timeline Progress Loop */
         .video-js .vjs-progress-control {
-            position: absolute !important;
-            width: calc(100% - 32px) !important;
-            height: 5px !important;
-            top: -5px !important; left: 16px !important;
+            flex: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            min-width: 100px !important;
+            height: 100% !important;
+            margin-right: 12px !important;
         }
 
         .video-js .vjs-progress-holder {
-            height: 100% !important;
+            height: 6px !important;
             margin: 0 !important;
-            background: rgba(255, 255, 255, 0.1) !important;
-            border-radius: 3px !important;
+            width: 100% !important;
+            background: rgba(255, 255, 255, 0.12) !important;
+            border-radius: 4px !important;
         }
 
-        /* Play Progress Filled Glow Line */
+        /* Play Progress Glow Line Track */
         .video-js .vjs-play-progress {
             background: linear-gradient(90deg, #6366f1, var(--brand-accent)) !important;
-            border-radius: 3px !important;
-        }
-        .video-js .vjs-play-progress:before {
-            display: none !important; /* Clears original oversized progress circle node */
-        }
-
-        /* Hover Load Buffer Line */
-        .video-js .vjs-load-progress {
-            background: rgba(255, 255, 255, 0.15) !important;
-            border-radius: 3px !important;
-        }
-
-        /* Time Displays Vertical Centering Layout */
-        .video-js .vjs-time-control {
-            line-height: 54px !important;
-            padding: 0 6px !important;
-            font-size: 0.9rem !important;
-            font-weight: 500 !important;
-            color: #d4d4d8 !important;
+            border-radius: 4px !important;
         }
         
-        /* Volume Bar Component Styling */
-        .video-js .vjs-volume-bar {
-            margin: 23px 5px !important;
+        /* Remove the classic huge seek circle handle */
+        .video-js .vjs-play-progress:before {
+            display: none !important; 
         }
+
+        .video-js .vjs-load-progress {
+            background: rgba(255, 255, 255, 0.18) !important;
+            border-radius: 4px !important;
+        }
+        .video-js .vjs-load-progress div {
+            background: transparent !important;
+        }
+
+        /* Universal Text Formatting Matrix */
+        .video-js .vjs-time-control {
+            display: flex !important;
+            align-items: center !important;
+            height: 100% !important;
+            padding: 0 4px !important;
+            font-size: 0.85rem !important;
+            font-weight: 600 !important;
+            color: #e4e4e7 !important;
+            min-width: auto !important;
+        }
+        
+        .video-js .vjs-time-divider { min-width: auto !important; padding: 0 2px !important; }
+
+        /* Volume Elements Uniform Grid Alignment */
+        .video-js .vjs-volume-panel {
+            display: flex !important;
+            align-items: center !important;
+            height: 100% !important;
+        }
+
+        .video-js .vjs-volume-bar {
+            margin: 0 !important;
+            background: rgba(255, 255, 255, 0.15) !important;
+            height: 5px !important;
+            border-radius: 3px !important;
+        }
+
         .video-js .vjs-volume-level {
-            background: #fff !important;
+            background: #ffffff !important;
+            border-radius: 3px !important;
         }
     </style>
 </head>
@@ -197,31 +229,34 @@ PLAYER_TEMPLATE = """
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // High Speed Adaptive Preloading Configuration Setup Parameters
             const player = videojs('my-video', {
                 preload: 'auto',
                 autoplay: true,
                 controls: true,
                 fluid: false, 
-                inactivityTimeout: 2000, // Time in ms before the control panel beautifully floats away
+                inactivityTimeout: 2500, // Seamless vanishing timer interface frame
+                controlBar: {
+                    // Turn off components that clutter standard structural alignment blueprints
+                    pictureInPictureToggle: false,
+                    remainingTimeDisplay: false
+                },
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 45, // Heavy media segments layout caching boundaries
+                        maxBufferLength: 45, 
                         liveBufferLength: 12
                     }
                 }
             });
 
-            // Fast event hook pipeline sequence to drop loader panel
+            // Fast Event Hook Matrix to destroy Loader Screen Elements
             player.on('canplay', function() {
                 const loader = document.getElementById('video-loader');
                 if (loader) {
                     loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 400); // Completely destroy node layer block
+                    setTimeout(() => loader.remove(), 400); 
                 }
                 player.play().catch(() => {
-                    // Fail-safe programmatic fallback activation switch
                     player.muted(true);
                     player.play();
                 });
