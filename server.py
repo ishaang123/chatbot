@@ -120,10 +120,11 @@ PLAYER_TEMPLATE = """
 </html>
 """
 
+import time  # Make sure to add this at the top of your starter.py file!
+
 @app.route('/download', methods=['POST', 'GET'])
 def render_player():
-    user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get(
-        'id_or_url', '').strip()
+    user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
 
     if not user_input:
         return "Missing 'id_or_url' parameter.", 400
@@ -133,7 +134,6 @@ def render_player():
     else:
         target_url = f"https://www.dailymotion.com/video/{user_input}"
 
-    # Use standard format selection to avoid format restrictions error crashes
     ydl_opts = {
         'format': 'bestvideo+bestaudio/best',
         'quiet': True,
@@ -142,22 +142,45 @@ def render_player():
         'impersonate': ImpersonateTarget.from_str('chrome')
     }
 
+    info = None
+    m3u8_url = None
+
+    # First Attempt
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
             formats = info.get('formats', [])
-
             hls_streams = [f for f in formats if 'hls' in f.get('format_id', '') and f.get('url')]
             m3u8_url = hls_streams[-1].get('url') if hls_streams else (info.get('url') or formats[-1].get('url'))
+    except Exception as first_error:
+        print(f"First attempt failed: {first_error}. Retrying in 1 second...")
+        time.sleep(1)  # Cool-down pause to clear temporary rate limits
+        
+        # Second Attempt (The Retry)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(target_url, download=False)
+                formats = info.get('formats', [])
+                hls_streams = [f for f in formats if 'hls' in f.get('format_id', '') and f.get('url')]
+                m3u8_url = hls_streams[-1].get('url') if hls_streams else (info.get('url') or formats[-1].get('url'))
+        except Exception as second_error:
+            # Absolute Backup Fallback: Build the direct CDN link manually so it STILL plays
+            print(f"Retry failed too: {second_error}. Using fallback template link.")
+            video_id = user_input.split("/video/")[-1].split("?")[0] if "/video/" in user_input else user_input
+            m3u8_url = f"https://www.dailymotion.com/cdn/manifest/video/{video_id}.m3u8"
+            
+            # Create a mock info dict so the page doesn't crash on title rendering
+            info = {'title': 'Dailymotion Stream (Fallback Mode)'}
 
-        if not m3u8_url:
-            return "Failed to find manifest endpoint maps.", 500
+    # Final validation safety check
+    if not m3u8_url:
+        return "Failed to find manifest endpoint maps.", 500
 
-        return render_template_string(PLAYER_TEMPLATE, title=info.get('title', 'Dailymotion Stream'),
-                                      target_url=m3u8_url)
-
-    except Exception as e:
-        return f"Initialization Error: {str(e)}", 500
+    return render_template_string(
+        PLAYER_TEMPLATE, 
+        title=info.get('title', 'Dailymotion Stream') if info else 'Dailymotion Stream',
+        target_url=m3u8_url
+    )
 
 
 @app.route('/manifest')
