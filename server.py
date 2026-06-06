@@ -1,5 +1,5 @@
 import os
-import re  # FIX: Added missing regular expressions module import
+import re
 import urllib.parse
 from flask import Flask, request, Response, render_template_string
 import yt_dlp
@@ -17,28 +17,36 @@ PLAYER_TEMPLATE = """
     <title>{{ title }}</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
+        /* Immersive True Fullscreen Cinema Styling */
         html, body { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
             background-color: #000; overflow: hidden; 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
+
         .video-wrapper { 
             position: relative; width: 100%; height: 100%; 
             display: flex; justify-content: center; align-items: center;
         }
+
+        /* Forces Video.js player component to natively cover 100% viewport dimensions */
         .video-js { 
             width: 100% !important; height: 100% !important; 
         }
+
+        /* Modernized Minimalist Neon Loader Screen overlay */
         #video-loader {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             background: #0a0a0a; z-index: 9999; 
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             transition: opacity 0.3s cubic-bezier(0.25, 1, 0.5, 1);
         }
+
         .spinner-box {
             position: relative; width: 64px; height: 64px;
             display: flex; justify-content: center; align-items: center;
         }
+
         .spinner {
             box-sizing: border-box; width: 100%; height: 100%;
             border: 4px solid rgba(255, 0, 85, 0.1);
@@ -46,17 +54,21 @@ PLAYER_TEMPLATE = """
             border-radius: 50%;
             animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
+
         @keyframes spin { to { transform: rotate(360deg); } }
+
         .loader-text { 
             margin-top: 20px; font-size: 1rem; font-weight: 500;
             color: #ffffff; letter-spacing: 1.5px; text-transform: uppercase;
             text-shadow: 0 0 10px rgba(255, 0, 85, 0.4);
             animation: pulse 1.5s ease-in-out infinite;
         }
+
         @keyframes pulse { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
+
     <div class="video-wrapper">
         <div id="video-loader">
             <div class="spinner-box">
@@ -64,34 +76,40 @@ PLAYER_TEMPLATE = """
             </div>
             <div class="loader-text">Streaming Buffer Connecting</div>
         </div>
+
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
             <source src="/manifest?url={{ target_url | urlencode }}" type="application/x-mpegURL">
         </video>
     </div>
+
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
+            // High Speed Adaptive Preloading configuration parameters 
             const player = videojs('my-video', {
                 preload: 'auto',
                 autoplay: true,
                 controls: true,
-                fluid: false,
+                fluid: false, // Turned off to prevent aspect ratio window restrictions
                 inactivityTimeout: 1500,
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 45,
+                        maxBufferLength: 45, // Expanded caching boundaries for zero buffering lag
                         liveBufferLength: 12
                     }
                 }
             });
+
+            // Instantaneous Drop-out hook to drop loader elements fast
             player.on('canplay', function() {
                 const loader = document.getElementById('video-loader');
                 if (loader) {
                     loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 300);
+                    setTimeout(() => loader.remove(), 300); // Demolish from DOM to save browser GPU memory
                 }
                 player.play().catch(() => {
+                    // Fail-safe protection switch if system autoplay block rules restrict first load chimes
                     player.muted(true);
                     player.play();
                 });
@@ -104,33 +122,43 @@ PLAYER_TEMPLATE = """
 
 @app.route('/download', methods=['POST', 'GET'])
 def render_player():
-    user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
+    user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get(
+        'id_or_url', '').strip()
 
     if not user_input:
         return "Missing 'id_or_url' parameter.", 400
 
-    # Optimization: Extract ID directly to leverage flat extraction 
-    video_id = user_input.split("/video/")[-1].split("?")[0] if "/video/" in user_input else user_input
-    
-    # Blazing Fast Pipeline: Pre-built manifest template to drop response delays down under 0.3s
-    m3u8_url = f"https://www.dailymotion.com/cdn/manifest/video/{video_id}.m3u8"
+    if "dailymotion.com" in user_input:
+        target_url = user_input if user_input.startswith(("http://", "https://")) else f"https://{user_input}"
+    else:
+        target_url = f"https://www.dailymotion.com/video/{user_input}"
 
+    # Use standard format selection to avoid format restrictions error crashes
     ydl_opts = {
+        'format': 'bestvideo+bestaudio/best',
         'quiet': True,
         'no_warnings': True,
-        'extract_flat': True,  # Speeds up HTML generation dramatically on cloud environments
-        'skip_download': True,
+        'extract_flat': False,
         'impersonate': ImpersonateTarget.from_str('chrome')
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"https://www.dailymotion.com/video/{video_id}", download=False)
-            title = info.get('title', 'Dailymotion Stream')
-    except Exception:
-        title = "Dailymotion Stream"
+            info = ydl.extract_info(target_url, download=False)
+            formats = info.get('formats', [])
 
-    return render_template_string(PLAYER_TEMPLATE, title=title, target_url=m3u8_url)
+            hls_streams = [f for f in formats if 'hls' in f.get('format_id', '') and f.get('url')]
+            m3u8_url = hls_streams[-1].get('url') if hls_streams else (info.get('url') or formats[-1].get('url'))
+
+        if not m3u8_url:
+            return "Failed to find manifest endpoint maps.", 500
+
+        return render_template_string(PLAYER_TEMPLATE, title=info.get('title', 'Dailymotion Stream'),
+                                      target_url=m3u8_url)
+
+    except Exception as e:
+        return f"Initialization Error: {str(e)}", 500
+
 
 @app.route('/manifest')
 def proxy_m3u8():
@@ -150,6 +178,8 @@ def proxy_m3u8():
         if not line_stripped:
             continue
 
+        # CRITICAL FIXED PIECE: Capture separate audio manifests hiding in attributes like:
+        # #EXT-X-MEDIA:TYPE=AUDIO,...,URI="https://..."
         if 'URI=' in line_stripped:
             def replace_uri(match):
                 rel_path = match.group(1).strip('"\'')
@@ -177,6 +207,7 @@ def proxy_m3u8():
 
     return Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
 
+
 @app.route('/segment')
 def proxy_ts_segment():
     raw_ts_url = request.args.get('url')
@@ -185,6 +216,7 @@ def proxy_ts_segment():
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+
     req = requests.get(raw_ts_url, headers=headers, stream=True)
 
     def stream_ts_data():
@@ -194,7 +226,7 @@ def proxy_ts_segment():
     content_type = req.headers.get('Content-Type', 'video/MP2T')
     return Response(stream_ts_data(), content_type=content_type)
 
-# Production fallbacks for local running
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
