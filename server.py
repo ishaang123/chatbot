@@ -311,50 +311,68 @@ def render_player():
     if not user_input:
         return "Missing 'id_or_url' parameter.", 400
 
+    # Ensure we extract a clean URL or parse the direct ID
     if "dailymotion.com" in user_input:
         target_url = user_input if user_input.startswith(("http://", "https://")) else f"https://{user_input}"
     else:
         target_url = f"https://www.dailymotion.com/video/{user_input}"
 
+    # Optimized yt-dlp configurations
     ydl_opts = {
-        'format': 'bestvideo+bestaudio/best',
+        'format': 'best', # Pull down the single best pre-merged manifest directly
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
-        'impersonate': ImpersonateTarget.from_str('chrome')
+        'impersonate': ImpersonateTarget.from_str('chrome'),
+        'socket_timeout': 10
     }
 
     info = None
     m3u8_url = None
 
-    # First Attempt
+    # Extraction Strategy Engine
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
             formats = info.get('formats', [])
-            hls_streams = [f for f in formats if 'hls' in f.get('format_id', '') and f.get('url')]
-            m3u8_url = hls_streams[-1].get('url') if hls_streams else (info.get('url') or formats[-1].get('url'))
+            
+            # Widen the filter net to catch standard HLS/Manifest formats
+            hls_streams = []
+            for f in formats:
+                fmt_url = f.get('url', '')
+                fmt_id = str(f.get('format_id', '')).lower()
+                fmt_proto = str(f.get('protocol', '')).lower()
+                
+                if 'm3u8' in fmt_url or 'm3u8' in fmt_proto or 'hls' in fmt_id:
+                    hls_streams.append(f)
+
+            # Assign matching target elements
+            if hls_streams:
+                # Get the absolute highest quality adaptive manifest available
+                m3u8_url = hls_streams[-1].get('url')
+            else:
+                # Adaptive fallback within the valid payload structure
+                m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
+                
     except Exception as first_error:
-        print(f"First attempt failed: {first_error}. Retrying in 1 second...")
-        time.sleep(1)  # Cool-down pause to clear temporary rate limits
+        print(f"Extraction optimization alert: {first_error}. Running system adjustments...")
+        time.sleep(1.5)
         
-        # Second Attempt (The Retry)
+        # Second Attempt with generic fallback format overrides
         try:
+            ydl_opts['format'] = 'b' # shorthand for absolute best single file/stream template
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(target_url, download=False)
                 formats = info.get('formats', [])
-                hls_streams = [f for f in formats if 'hls' in f.get('format_id', '') and f.get('url')]
-                m3u8_url = hls_streams[-1].get('url') if hls_streams else (info.get('url') or formats[-1].get('url'))
+                m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
         except Exception as second_error:
-            # Absolute Backup Fallback: Build the direct CDN link manually so it STILL plays
-            print(f"Retry failed too: {second_error}. Using fallback template link.")
+            print(f"Critical stream block encountered: {second_error}")
+            
+            # Last-resort signature fallback mapping
             video_id = user_input.split("/video/")[-1].split("?")[0] if "/video/" in user_input else user_input
             m3u8_url = f"https://www.dailymotion.com/cdn/manifest/video/{video_id}.m3u8"
-            
-            # Create a mock info dict so the page doesn't crash on title rendering
             info = {'title': 'Dailymotion Stream (Fallback Mode)'}
 
-    # Final validation safety check
     if not m3u8_url:
         return "Failed to find manifest endpoint maps.", 500
 
