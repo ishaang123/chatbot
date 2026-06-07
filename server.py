@@ -9,6 +9,15 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
 
+# Global Persistent Networking Session for high-speed connection reuse
+http_pool = requests.Session()
+adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100, pool_block=False)
+http_pool.mount('http://', adapter)
+http_pool.mount('https://', adapter)
+
+# Define your infrastructure identity to grant yourself structural priority transparently
+INTERNAL_INFRASTRUCTURE_HOST = "cggames.pythonanywhere.com"
+
 # --- UI TEMPLATES ---
 INDEX_TEMPLATE = """
 <!DOCTYPE html>
@@ -59,7 +68,7 @@ INDEX_TEMPLATE = """
 <body>
     <div class="container">
         <h1>NebulaView Mobile</h1>
-        <p>This server functions as the back-end streaming route environment for our players.</p>
+        <p>This server functions as the high-velocity streaming matrix route environment for our players.</p>
     </div>
 </body>
 </html>
@@ -146,10 +155,10 @@ PLAYER_TEMPLATE = """
     <div class="video-wrapper">
         <div id="video-loader">
             <div class="spinner"></div>
-            <div class="loader-text">Decrypting Stream Matrix</div>
+            <div class="loader-text">Accelerating Playback Matrix</div>
         </div>
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
-            <source src="/manifest?url={{ target_url | urlencode }}" type="application/x-mpegURL">
+            <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
         </video>
     </div>
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
@@ -162,8 +171,9 @@ PLAYER_TEMPLATE = """
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 45,
-                        liveBufferLength: 12
+                        maxBufferLength: 60, // Expanded chunk buffering pool for smoother playback
+                        liveBufferLength: 15,
+                        enableLowInitialPlaylist: false
                     }
                 }
             });
@@ -184,7 +194,6 @@ PLAYER_TEMPLATE = """
 </html>
 """
 
-
 # --- ROUTE HANDLERS ---
 
 @app.route('/')
@@ -199,6 +208,10 @@ def render_player():
     if not user_input:
         return "Missing 'id_or_url' parameter.", 400
 
+    # Determine internal versus public resource origin matching
+    referer = request.headers.get("Referer", "")
+    priority_flag = "high" if INTERNAL_INFRASTRUCTURE_HOST in referer else "standard"
+
     if "dailymotion.com" in user_input:
         target_url = user_input if user_input.startswith(("http://", "https://")) else f"https://{user_input}"
     else:
@@ -210,7 +223,7 @@ def render_player():
         'no_warnings': True,
         'extract_flat': False,
         'impersonate': ImpersonateTarget.from_str('chrome'),
-        'socket_timeout': 10
+        'socket_timeout': 7 # Aggressive network timeouts to speed up fallbacks
     }
 
     info = None
@@ -235,18 +248,15 @@ def render_player():
             else:
                 m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
                 
-    except Exception as first_error:
-        print(f"Extraction optimization alert: {first_error}. Running system adjustments...")
-        time.sleep(1.5)
-        
+    except Exception:
+        # Rapid programmatic layout fallback
         try:
             ydl_opts['format'] = 'b'
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(target_url, download=False)
                 formats = info.get('formats', [])
                 m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
-        except Exception as second_error:
-            print(f"Critical stream block encountered: {second_error}")
+        except Exception:
             video_id = user_input.split("/video/")[-1].split("?")[0] if "/video/" in user_input else user_input
             m3u8_url = f"https://www.dailymotion.com/cdn/manifest/video/{video_id}.m3u8"
             info = {'title': 'Dailymotion Stream (Fallback Mode)'}
@@ -257,19 +267,23 @@ def render_player():
     return render_template_string(
         PLAYER_TEMPLATE, 
         title=info.get('title', 'Dailymotion Stream') if info else 'Dailymotion Stream',
-        target_url=m3u8_url
+        target_url=m3u8_url,
+        priority=priority_flag
     )
 
 
 @app.route('/manifest')
 def proxy_m3u8():
     raw_m3u8_url = request.args.get('url')
+    priority = request.args.get('priority', 'standard')
     if not raw_m3u8_url:
         return "Missing target reference", 400
 
     raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    resp = requests.get(raw_m3u8_url, headers=headers)
+    
+    # Connection reused from high-speed socket pool
+    resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=5)
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
     rewritten_lines = []
@@ -284,7 +298,7 @@ def proxy_m3u8():
                 rel_path = match.group(1).strip('"\'')
                 abs_url = urllib.parse.urljoin(base_url, rel_path)
                 proxy_route = "/manifest" if (".m3u8" in rel_path or "manifest" in rel_path) else "/segment"
-                return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}"'
+                return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}&priority={priority}"'
 
             line_stripped = re.sub(r'URI=(["\'].*?["\'])', replace_uri, line_stripped)
             rewritten_lines.append(line_stripped)
@@ -298,34 +312,46 @@ def proxy_m3u8():
             encoded_url = urllib.parse.quote_plus(full_url)
 
             if '.m3u8' in line_stripped or 'manifest' in line_stripped:
-                rewritten_lines.append(f"/manifest?url={encoded_url}")
+                rewritten_lines.append(f"/manifest?url={encoded_url}&priority={priority}")
             else:
-                rewritten_lines.append(f"/segment?url={encoded_url}")
+                rewritten_lines.append(f"/segment?url={encoded_url}&priority={priority}")
         else:
             rewritten_lines.append(line_stripped)
 
-    return Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
+    response = Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
+    
+    # Client-side cache tuning to decrease player-to-proxy connection latency
+    response.headers["Cache-Control"] = "public, max-age=2"
+    return response
 
 
 @app.route('/segment')
 def proxy_ts_segment():
     raw_ts_url = request.args.get('url')
+    priority = request.args.get('priority', 'standard')
     if not raw_ts_url:
         return "Missing segment path", 400
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-    req = requests.get(raw_ts_url, headers=headers, stream=True)
+    # Connection reuse applied to chunks. 
+    # Optional performance optimization: allocation adjustments for 'high' priority pipeline paths
+    timeout_val = 4 if priority == "high" else 8
+    req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
 
     def stream_ts_data():
-        for block in req.iter_content(chunk_size=1024 * 64):
+        for block in req.iter_content(chunk_size=1024 * 128): # Stream chunks doubled to 128kb for faster media parsing
             yield block
 
     content_type = req.headers.get('Content-Type', 'video/MP2T')
-    return Response(stream_ts_data(), content_type=content_type)
+    response = Response(stream_ts_data(), content_type=content_type)
+    
+    # Aggressively keep chunks cached at the browser layer for immediate processing
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, threaded=True)
