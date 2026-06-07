@@ -136,6 +136,8 @@ PLAYER_TEMPLATE = """
             width: calc(100% - 32px) !important;
             height: 54px !important;
             bottom: 16px !important; left: 16px !important;
+            display: flex;
+            align-items: center;
         }
         .video-js .vjs-progress-control {
             position: absolute !important;
@@ -149,6 +151,27 @@ PLAYER_TEMPLATE = """
         }
         .video-js .vjs-play-progress:before { display: none !important; }
         .video-js .vjs-time-control { line-height: 54px !important; }
+
+        /* --- STYLIZED DOWNLOAD COMPONENT ACTION PANEL --- */
+        .vjs-download-control {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 100%;
+            order: 99; /* Forces placement toward the right side of control panel */
+        }
+        .vjs-download-control svg {
+            width: 20px;
+            height: 20px;
+            fill: #d4d4d8;
+            transition: fill 0.2s ease, transform 0.2s ease;
+        }
+        .vjs-download-control:hover svg {
+            fill: var(--brand-accent);
+            transform: translateY(1px);
+        }
     </style>
 </head>
 <body>
@@ -171,12 +194,49 @@ PLAYER_TEMPLATE = """
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 60, // Expanded chunk buffering pool for smoother playback
+                        maxBufferLength: 60,
                         liveBufferLength: 15,
                         enableLowInitialPlaylist: false
                     }
                 }
             });
+
+            // Programmatic integration of the High-Velocity Download Engine
+            player.ready(function() {
+                const controlBar = player.getChild('controlBar');
+                
+                // Create custom element component container
+                const downloadBtn = document.createElement('div');
+                downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
+                downloadBtn.title = 'Download Video Source File';
+                
+                // Neon UI download arrow icon design
+                downloadBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/>
+                    </svg>
+                `;
+
+                // Fire high-speed payload extract mapping on user interaction
+                downloadBtn.addEventListener('click', function() {
+                    // Extract encoded master stream path assigned directly to playback element source
+                    const currentSrc = player.src();
+                    const urlParams = new URLSearchParams(currentSrc.split('?')[1]);
+                    const targetM3u8Url = urlParams.get('url');
+
+                    if (targetM3u8Url) {
+                        // Point client safely directly to the decrypted manifest route
+                        window.open(decodeURIComponent(targetM3u8Url), '_blank');
+                    } else {
+                        // Resilient fallback option to stream route address
+                        window.open(currentSrc, '_blank');
+                    }
+                });
+
+                // Attach button structure directly into VideoJS DOM layout tree
+                controlBar.el().appendChild(downloadBtn);
+            });
+
             player.on('canplay', function() {
                 const loader = document.getElementById('video-loader');
                 if (loader) {
