@@ -1,12 +1,71 @@
 import os
 import re
+import time
+import secrets
+import hmac
+import hashlib
 import urllib.parse
-from flask import Flask, request, Response, render_template_string
+from flask import Flask, request, Response, render_template_string, abort
 import yt_dlp
 import requests
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
+
+# --- SECURITY CONFIGURATION ---
+ALLOWED_DOMAIN = "https://cggames.pythonanywhere.com"
+# Automatically generates a fresh key on startup to sign streaming tokens
+SECRET_KEY = os.environ.get("STREAM_SECRET_KEY", secrets.token_hex(32)).encode('utf-8')
+TOKEN_TTL = 14400  # Token validity window: 4 hours
+
+def generate_stream_token(video_id):
+    """Generates a timed, cryptographically signed playback token."""
+    expires = str(int(time.time()) + TOKEN_TTL)
+    msg = f"{video_id}:{expires}".encode('utf-8')
+    signature = hmac.new(SECRET_KEY, msg, hashlib.sha256).hexdigest()
+    return f"{expires}.{signature}"
+
+def verify_stream_token(video_id, token):
+    """Verifies the token cryptographic signature and expiration status."""
+    if not token:
+        return False
+    try:
+        expires, signature = token.split('.', 1)
+        if int(expires) < time.time():
+            return False  # Expired
+        msg = f"{video_id}:{expires}".encode('utf-8')
+        expected = hmac.new(SECRET_KEY, msg, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    except Exception:
+        return False
+
+def check_domain_clearance(req):
+    """Enforces strict Origin/Referer browser domain alignment."""
+    # Read browser security headers
+    origin = req.headers.get("Origin")
+    referer = req.headers.get("Referer")
+    
+    if origin and origin.rstrip('/') != ALLOWED_DOMAIN.rstrip('/'):
+        return False
+    if referer and not referer.startswith(ALLOWED_DOMAIN):
+        return False
+    # If a direct browser access attempt is made without Origin/Referer, drop it
+    if not origin and not referer:
+        return False
+    return True
+
+def add_cors_headers(response):
+    """Appends explicit cross-origin policy parameters to outbound payloads."""
+    response.headers["Access-Control-Allow-Origin"] = ALLOWED_DOMAIN
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Origin, Accept, Content-Type, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["X-Frame-Options"] = f"ALLOW-FROM {ALLOWED_DOMAIN}"
+    response.headers["Content-Security-Policy"] = f"frame-ancestors 'self' {ALLOWED_DOMAIN}"
+    return response
+
+
+# --- UI TEMPLATES ---
 INDEX_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -15,69 +74,21 @@ INDEX_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NebulaView Engine Core</title>
     <style>
-        body {
-            background-color: #09090b;
-            color: #f4f4f5;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .container {
-            max-width: 500px;
-            text-align: center;
-            padding: 40px;
-            background: rgba(15, 15, 20, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 16px;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-        }
-        h1 {
-            font-size: 1.8rem;
-            margin-bottom: 16px;
-            background: linear-gradient(135deg, #ff0055, #6366f1);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: 1px;
-        }
-        p {
-            color: #a1a1aa;
-            line-height: 1.6;
-            font-size: 0.95rem;
-            margin-bottom: 24px;
-        }
-        .warning {
-            display: inline-block;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+        body { background-color: #09090b; color: #f4f4f5; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { max-width: 500px; text-align: center; padding: 40px; background: rgba(15, 15, 20, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; backdrop-filter: blur(20px); }
+        h1 { font-size: 1.8rem; margin-bottom: 16px; background: linear-gradient(135deg, #ff0055, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        p { color: #a1a1aa; line-height: 1.6; font-size: 0.95rem; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>NebulaView Mobile</h1>
-        <p>This server functions exclusively as the back-end streaming route environment for our players. Manual configuration requests or direct interactions are restricted.</p>
-        <div class="warning">Please do not use this route! Resulting so will result in not only an IP ban from NebulaVideo services, but as well as from our homepage! </div>
+        <h1>NebulaView Core</h1>
+        <p>Direct interaction environment is restricted. Security validation policies active.</p>
     </div>
 </body>
 </html>
 """
 
-@app.route('/')
-def index():
-    return render_template_string(INDEX_TEMPLATE)
 PLAYER_TEMPLATE = """
 <html lang="en">
 <head>
@@ -86,215 +97,40 @@ PLAYER_TEMPLATE = """
     <title>{{ title }}</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
-        /* ==========================================================================
-           1. IMMERSIVE CANVAS AND ENGINE WRAPPERS
-           ========================================================================== */
-        html, body { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            background-color: #030303; overflow: hidden; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        }
-
-        .video-wrapper { 
-            position: relative; width: 100%; height: 100%; 
-            display: flex; justify-content: center; align-items: center;
-        }
-
-        .video-js { 
-            width: 100% !important; height: 100% !important; 
-            background-color: #000 !important;
-        }
-
-        /* ==========================================================================
-           2. PREMIUM THEMED NEON LOADER OVERLAY
-           ========================================================================== */
-        #video-loader {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            background: #09090b; z-index: 9999; 
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-            pointer-events: none;
-        }
-
-        .spinner-box {
-            position: relative; width: 64px; height: 64px;
-            display: flex; justify-content: center; align-items: center;
-        }
-
-        .spinner {
-            box-sizing: border-box; width: 100%; height: 100%;
-            border: 4px solid rgba(99, 102, 241, 0.1);
-            border-top: 4px solid #6366f1; /* Matched to main brand purple */
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #030303; overflow: hidden; font-family: sans-serif; }
+        .video-wrapper { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+        .video-js { width: 100% !important; height: 100% !important; background-color: #000 !important; }
+        #video-loader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #09090b; z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.4s ease; pointer-events: none; }
+        .spinner { box-sizing: border-box; width: 64px; height: 64px; border: 4px solid rgba(99, 102, 241, 0.1); border-top: 4px solid #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-
-        .loader-text { 
-            margin-top: 22px; font-size: 0.8rem; font-weight: 600;
-            color: #ffffff; letter-spacing: 2px; text-transform: uppercase;
-            text-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
-            animation: pulse 1.5s ease-in-out infinite;
-            opacity: 0.8;
-        }
-
-        @keyframes pulse { 50% { opacity: 0.3; } }
-
-        /* ==========================================================================
-           3. COMPLETE PREMIUM VIDEO.JS SKIN OVERRIDES (GLASSMORPHISM)
-           ========================================================================== */
-        /* Custom UI Variables Matrix */
-        :root {
-            --brand-accent: #ff0055;       /* Neon Magenta Highlight */
-            --glass-bg: rgba(15, 15, 20, 0.6); /* Matte semi-transparent blur bar */
-            --glass-border: rgba(255, 255, 255, 0.08);
-        }
-
-        /* The Big Play Button Centerpiece Upgrade */
-        .video-js .vjs-big-play-button {
-            background: linear-gradient(135deg, rgba(255, 0, 85, 0.8), rgba(99, 102, 241, 0.8)) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            border-radius: 50% !important;
-            width: 76px !important; height: 76px !important;
-            line-height: 74px !important;
-            margin-top: -38px !important; margin-left: -38px !important;
-            box-shadow: 0 8px 32px rgba(255, 0, 85, 0.3) !important;
-            backdrop-filter: blur(4px);
-            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease !important;
-        }
-
-        .video-js:hover .vjs-big-play-button {
-            transform: scale(1.1);
-            box-shadow: 0 12px 40px rgba(255, 0, 85, 0.5) !important;
-            background: linear-gradient(135deg, #ff0055, #6366f1) !important;
-        }
-
-        /* Floating Modern Control Bar Glass Panel */
-        .video-js .vjs-control-bar {
-            background: var(--glass-bg) !important;
-            backdrop-filter: blur(20px) !important;
-            -webkit-backdrop-filter: blur(20px) !important;
-            border: 1px solid var(--glass-border);
-            border-radius: 16px !important;
-            width: calc(100% - 32px) !important;
-            height: 54px !important;
-            bottom: 16px !important; left: 16px !important;
-            padding: 0 8px !important;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5) !important;
-            box-sizing: border-box !important;
-            transition: opacity 0.3s, transform 0.3s !important;
-        }
-
-        /* Smooth Hide/Show Transition Shifts when controls disappear */
-        .video-js.vjs-user-inactive .vjs-control-bar {
-            transform: translateY(10px);
-        }
-
-        /* Icon Controls Padding Adjustment */
-        .video-js .vjs-control {
-            width: 44px !important;
-            height: 100% !important;
-        }
-        .video-js .vjs-button > .vjs-icon-placeholder:before {
-            line-height: 54px !important;
-            font-size: 1.8em !important;
-        }
-
-        /* Sleek Neon Progress Tracker Base Track */
-        .video-js .vjs-progress-control {
-            position: absolute !important;
-            width: calc(100% - 32px) !important;
-            height: 5px !important;
-            top: -5px !important; left: 16px !important;
-        }
-
-        .video-js .vjs-progress-holder {
-            height: 100% !important;
-            margin: 0 !important;
-            background: rgba(255, 255, 255, 0.1) !important;
-            border-radius: 3px !important;
-        }
-
-        /* Play Progress Filled Glow Line */
-        .video-js .vjs-play-progress {
-            background: linear-gradient(90deg, #6366f1, var(--brand-accent)) !important;
-            border-radius: 3px !important;
-        }
-        .video-js .vjs-play-progress:before {
-            display: none !important; /* Clears original oversized progress circle node */
-        }
-
-        /* Hover Load Buffer Line */
-        .video-js .vjs-load-progress {
-            background: rgba(255, 255, 255, 0.15) !important;
-            border-radius: 3px !important;
-        }
-
-        /* Time Displays Vertical Centering Layout */
-        .video-js .vjs-time-control {
-            line-height: 54px !important;
-            padding: 0 6px !important;
-            font-size: 0.9rem !important;
-            font-weight: 500 !important;
-            color: #d4d4d8 !important;
-        }
-        
-        /* Volume Bar Component Styling */
-        .video-js .vjs-volume-bar {
-            margin: 23px 5px !important;
-        }
-        .video-js .vjs-volume-level {
-            background: #fff !important;
-        }
+        .loader-text { margin-top: 22px; font-size: 0.8rem; font-weight: 600; color: #ffffff; letter-spacing: 2px; text-transform: uppercase; }
+        :root { --brand-accent: #ff0055; --glass-bg: rgba(15, 15, 20, 0.6); --glass-border: rgba(255, 255, 255, 0.08); }
+        .video-js .vjs-big-play-button { background: linear-gradient(135deg, rgba(255, 0, 85, 0.8), rgba(99, 102, 241, 0.8)) !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; border-radius: 50% !important; width: 76px !important; height: 76px !important; line-height: 74px !important; margin-top: -38px !important; margin-left: -38px !important; backdrop-filter: blur(4px); }
+        .video-js .vjs-control-bar { background: var(--glass-bg) !important; backdrop-filter: blur(20px) !important; -webkit-backdrop-filter: blur(20px) !important; border: 1px solid var(--glass-border); border-radius: 16px !important; width: calc(100% - 32px) !important; height: 54px !important; bottom: 16px !important; left: 16px !important; }
+        .video-js .vjs-progress-control { position: absolute !important; width: calc(100% - 32px) !important; height: 5px !important; top: -5px !important; left: 16px !important; }
+        .video-js .vjs-play-progress { background: linear-gradient(90deg, #6366f1, var(--brand-accent)) !important; border-radius: 3px !important; }
+        .video-js .vjs-play-progress:before { display: none !important; }
+        .video-js .vjs-time-control { line-height: 54px !important; }
     </style>
 </head>
 <body>
-
     <div class="video-wrapper">
-        <div id="video-loader">
-            <div class="spinner-box">
-                <div class="spinner"></div>
-            </div>
-            <div class="loader-text">Decrypting Stream Matrix</div>
-        </div>
-
+        <div id="video-loader"><div class="spinner"></div><div class="loader-text">Authorizing Matrix Access</div></div>
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
-            <source src="/manifest?url={{ target_url | urlencode }}" type="application/x-mpegURL">
+            <source src="/manifest?url={{ target_url | urlencode }}&id={{ video_id }}&tk={{ token }}" type="application/x-mpegURL">
         </video>
     </div>
-
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // High Speed Adaptive Preloading Configuration Setup Parameters
             const player = videojs('my-video', {
-                preload: 'auto',
-                autoplay: true,
-                controls: true,
-                fluid: false, 
-                inactivityTimeout: 2000, // Time in ms before the control panel beautifully floats away
-                html5: {
-                    vhs: {
-                        overrideNative: true,
-                        maxBufferLength: 45, // Heavy media segments layout caching boundaries
-                        liveBufferLength: 12
-                    }
-                }
+                preload: 'auto', autoplay: true, controls: true, inactivityTimeout: 2000,
+                html5: { vhs: { overrideNative: true, maxBufferLength: 45, liveBufferLength: 12 } }
             });
-
-            // Fast event hook pipeline sequence to drop loader panel
             player.on('canplay', function() {
                 const loader = document.getElementById('video-loader');
-                if (loader) {
-                    loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 400); // Completely destroy node layer block
-                }
-                player.play().catch(() => {
-                    // Fail-safe programmatic fallback activation switch
-                    player.muted(true);
-                    player.play();
-                });
+                if (loader) { loader.style.opacity = '0'; setTimeout(() => loader.remove(), 400); }
+                player.play().catch(() => { player.muted(true); player.play(); });
             });
         });
     </script>
@@ -302,24 +138,39 @@ PLAYER_TEMPLATE = """
 </html>
 """
 
-import time  # Make sure to add this at the top of your starter.py file!
+
+# --- ROUTE HANDLERS ---
+
+@app.route('/')
+def index():
+    if not check_domain_clearance(request):
+        abort(403, description="Access Denied: Out of ecosystem context.")
+    return add_cors_headers(Response(render_template_string(INDEX_TEMPLATE)))
+
 
 @app.route('/download', methods=['POST', 'GET'])
 def render_player():
-    user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
+    # CORS & Context Verification
+    if not check_domain_clearance(request):
+        abort(403, description="Access Denied: Embedding Context Violation.")
 
+    user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
     if not user_input:
         return "Missing 'id_or_url' parameter.", 400
 
-    # Ensure we extract a clean URL or parse the direct ID
+    # Extract clean target details
     if "dailymotion.com" in user_input:
         target_url = user_input if user_input.startswith(("http://", "https://")) else f"https://{user_input}"
+        video_id = user_input.split("/video/")[-1].split("?")[0]
     else:
         target_url = f"https://www.dailymotion.com/video/{user_input}"
+        video_id = user_input
 
-    # Optimized yt-dlp configurations
+    # Cryptographic keys generated exclusively for this single session run
+    token = generate_stream_token(video_id)
+
     ydl_opts = {
-        'format': 'best', # Pull down the single best pre-merged manifest directly
+        'format': 'best',
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
@@ -330,61 +181,63 @@ def render_player():
     info = None
     m3u8_url = None
 
-    # Extraction Strategy Engine
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
             formats = info.get('formats', [])
             
-            # Widen the filter net to catch standard HLS/Manifest formats
             hls_streams = []
             for f in formats:
                 fmt_url = f.get('url', '')
                 fmt_id = str(f.get('format_id', '')).lower()
                 fmt_proto = str(f.get('protocol', '')).lower()
-                
                 if 'm3u8' in fmt_url or 'm3u8' in fmt_proto or 'hls' in fmt_id:
                     hls_streams.append(f)
 
-            # Assign matching target elements
             if hls_streams:
-                # Get the absolute highest quality adaptive manifest available
                 m3u8_url = hls_streams[-1].get('url')
             else:
-                # Adaptive fallback within the valid payload structure
                 m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
                 
     except Exception as first_error:
-        print(f"Extraction optimization alert: {first_error}. Running system adjustments...")
+        print(f"Primary fetch bypassed: {first_error}. Adapting schema options...")
         time.sleep(1.5)
-        
-        # Second Attempt with generic fallback format overrides
         try:
-            ydl_opts['format'] = 'b' # shorthand for absolute best single file/stream template
+            ydl_opts['format'] = 'b'
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(target_url, download=False)
                 formats = info.get('formats', [])
                 m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
         except Exception as second_error:
-            print(f"Critical stream block encountered: {second_error}")
-            
-            # Last-resort signature fallback mapping
-            video_id = user_input.split("/video/")[-1].split("?")[0] if "/video/" in user_input else user_input
+            print(f"Fallback executed: {second_error}")
             m3u8_url = f"https://www.dailymotion.com/cdn/manifest/video/{video_id}.m3u8"
             info = {'title': 'Dailymotion Stream (Fallback Mode)'}
 
     if not m3u8_url:
         return "Failed to find manifest endpoint maps.", 500
 
-    return render_template_string(
+    response_payload = render_template_string(
         PLAYER_TEMPLATE, 
         title=info.get('title', 'Dailymotion Stream') if info else 'Dailymotion Stream',
-        target_url=m3u8_url
+        target_url=m3u8_url,
+        video_id=video_id,
+        token=token
     )
+    return add_cors_headers(Response(response_payload))
 
 
 @app.route('/manifest')
 def proxy_m3u8():
+    # 1. Validation Interceptors
+    if not check_domain_clearance(request):
+        abort(403, description="Cross-Origin Stream Hijacking Blocked.")
+
+    video_id = request.args.get('id')
+    token = request.args.get('tk')
+    
+    if not video_id or not verify_stream_token(video_id, token):
+        abort(401, description="Invalid or Expired System Token Access Keys.")
+
     raw_m3u8_url = request.args.get('url')
     if not raw_m3u8_url:
         return "Missing target reference", 400
@@ -401,14 +254,13 @@ def proxy_m3u8():
         if not line_stripped:
             continue
 
-        # CRITICAL FIXED PIECE: Capture separate audio manifests hiding in attributes like:
-        # #EXT-X-MEDIA:TYPE=AUDIO,...,URI="https://..."
+        # Append authorization parameters down through nested components
         if 'URI=' in line_stripped:
             def replace_uri(match):
                 rel_path = match.group(1).strip('"\'')
                 abs_url = urllib.parse.urljoin(base_url, rel_path)
                 proxy_route = "/manifest" if (".m3u8" in rel_path or "manifest" in rel_path) else "/segment"
-                return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}"'
+                return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}&id={video_id}&tk={token}"'
 
             line_stripped = re.sub(r'URI=(["\'].*?["\'])', replace_uri, line_stripped)
             rewritten_lines.append(line_stripped)
@@ -422,17 +274,27 @@ def proxy_m3u8():
             encoded_url = urllib.parse.quote_plus(full_url)
 
             if '.m3u8' in line_stripped or 'manifest' in line_stripped:
-                rewritten_lines.append(f"/manifest?url={encoded_url}")
+                rewritten_lines.append(f"/manifest?url={encoded_url}&id={video_id}&tk={token}")
             else:
-                rewritten_lines.append(f"/segment?url={encoded_url}")
+                rewritten_lines.append(f"/segment?url={encoded_url}&id={video_id}&tk={token}")
         else:
             rewritten_lines.append(line_stripped)
 
-    return Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
+    return add_cors_headers(Response("\n".join(rewritten_lines), content_type="application/x-mpegURL"))
 
 
 @app.route('/segment')
 def proxy_ts_segment():
+    # 1. Validation Interceptors
+    if not check_domain_clearance(request):
+        abort(403, description="Cross-Origin Segment Hijacking Blocked.")
+
+    video_id = request.args.get('id')
+    token = request.args.get('tk')
+    
+    if not video_id or not verify_stream_token(video_id, token):
+        abort(401, description="Invalid or Expired Segment Token Access Keys.")
+
     raw_ts_url = request.args.get('url')
     if not raw_ts_url:
         return "Missing segment path", 400
@@ -447,7 +309,13 @@ def proxy_ts_segment():
             yield block
 
     content_type = req.headers.get('Content-Type', 'video/MP2T')
-    return Response(stream_ts_data(), content_type=content_type)
+    return add_cors_headers(Response(stream_ts_data(), content_type=content_type))
+
+
+# Global options request interception for CORS Preflight checks
+@app.route('/<path:path>', methods=['OPTIONS'])
+def options_handler(path):
+    return add_cors_headers(Response())
 
 
 if __name__ == "__main__":
