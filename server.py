@@ -2,13 +2,14 @@ import os
 import re
 import urllib.parse
 import time
-from flask import Flask, request, Response, render_template_string, jsonify
+from flask import Flask, request, Response, render_template_string
 import yt_dlp
 import requests
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
 
+# High-performance connection pooling
 http_pool = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=500, pool_maxsize=500, pool_block=False)
 http_pool.mount('http://', adapter)
@@ -90,31 +91,24 @@ PLAYER_TEMPLATE = """
         .video-js .vjs-control-bar {
             background: var(--bar-bg) !important; backdrop-filter: blur(24px) !important; border: var(--border-style);
             border-radius: 14px !important; width: calc(100% - 24px) !important; height: 48px !important; bottom: 12px !important; left: 12px !important;
-            z-index: 10;
         }
         .video-js .vjs-progress-control { position: absolute !important; width: calc(100% - 24px) !important; height: 4px !important; top: -4px !important; left: 12px !important; }
         .video-js .vjs-play-progress { background: linear-gradient(90deg, #6366f1, var(--accent-color)) !important; }
         .video-js .vjs-play-progress:before { display: none !important; }
         .video-js .vjs-time-control { line-height: 48px !important; }
         
-        .vjs-download-control, .vjs-live-caption-btn { 
+        .vjs-download-control { 
             cursor: pointer; display: flex; align-items: center; justify-content: center; width: 38px; height: 100%; order: 99; 
         }
-        .vjs-download-control svg, .vjs-live-caption-btn svg { width: 18px; height: 18px; fill: #a1a1aa; transition: fill 0.2s, transform 0.2s; }
-        .vjs-download-control:hover svg, .vjs-live-caption-btn:hover svg { fill: #fff; transform: translateY(0.5px); }
-        .vjs-live-caption-btn.active svg { fill: var(--accent-color) !important; }
+        .vjs-download-control svg { width: 18px; height: 18px; fill: #a1a1aa; transition: fill 0.2s, transform 0.2s; }
+        .vjs-download-control:hover svg { fill: #fff; transform: translateY(0.5px); }
 
-        /* Custom overlay layout layer for live generated text streams */
-        #live-subtitle-overlay {
-            position: absolute; bottom: 80px; left: 5%; width: 90%; text-align: center;
-            z-index: 9; pointer-events: none; display: none;
-        }
-        .subtitle-text {
-            background-color: rgba(0, 0, 0, 0.75); color: #ffffff;
-            font-family: system-ui, -apple-system, sans-serif; font-size: 1.3rem;
-            font-weight: 500; padding: 6px 14px; border-radius: 6px;
-            display: inline-block; max-width: 85%; line-height: 1.4;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5); text-shadow: 0 1px 2px rgba(0,0,0,1);
+        .video-js .vjs-text-track-cue {
+            background-color: rgba(0, 0, 0, 0.75) !important;
+            color: #ffffff !important;
+            font-family: system-ui, sans-serif !important;
+            font-size: 1.25rem !important;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -124,10 +118,9 @@ PLAYER_TEMPLATE = """
             <div class="spinner"></div>
             <div class="loader-text">Instant Stream Activation</div>
         </div>
-        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
+        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline crossorigin="anonymous">
             <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}&cb={{ cb }}" type="application/x-mpegURL">
         </video>
-        <div id="live-subtitle-overlay"><span class="subtitle-text" id="sub-box">Listening to audio stream...</span></div>
     </div>
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
@@ -136,77 +129,22 @@ PLAYER_TEMPLATE = """
                 preload: 'auto',
                 autoplay: true,
                 controls: true,
+                controlBar: {
+                    subsCapsButton: true // Restore built-in clean menu options
+                },
                 html5: {
                     vhs: {
                         overrideNative: true,
                         maxBufferLength: 30,
                         enableLowInitialPlaylist: false,
-                        fastStart: true
+                        fastStart: true,
+                        withCredentials: false
                     }
                 }
             });
 
-            // LIVE IN-BROWSER WEB SPEECH CAPTION CORE
-            let recognition = null;
-            let isCaptioningActive = false;
-            const overlay = document.getElementById('live-subtitle-overlay');
-            const subBox = document.getElementById('sub-box');
-
-            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                const SpeechGen = window.SpeechRecognition || window.webkitSpeechRecognition;
-                recognition = new SpeechGen();
-                recognition.continuous = true;
-                recognition.interimResults = true;
-                recognition.lang = 'en-US';
-
-                recognition.onresult = function(event) {
-                    let textSlice = '';
-                    for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        textSlice += event.results[i][0].transcript;
-                    }
-                    subBox.innerText = textSlice;
-                    
-                    // Auto-fade text strings after 4 seconds of speech silence
-                    clearTimeout(window.subTimeout);
-                    window.subTimeout = setTimeout(() => {
-                        if(isCaptioningActive) subBox.innerText = "...";
-                    }, 4000);
-                };
-
-                recognition.onend = function() {
-                    // Instantly reconnect if player loop is still playing back audio streams
-                    if (isCaptioningActive && !player.paused()) {
-                        recognition.start();
-                    }
-                };
-            }
-
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
-                
-                // Add Live Captions Action Button
-                if (recognition) {
-                    const captionBtn = document.createElement('div');
-                    captionBtn.className = 'vjs-live-caption-btn vjs-control vjs-button';
-                    captionBtn.title = 'Toggle Live Browser Captions';
-                    captionBtn.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V9c0-.55.45-1 1-1h4c0 .55.45 1 1 1v2zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-4c-.55 0-1-.45-1-1V9c0-.55.45-1 1-1h4c0 .55.45 1 1 1v2z"/></svg>`;
-                    
-                    captionBtn.addEventListener('click', function() {
-                        isCaptioningActive = !isCaptioningActive;
-                        if (isCaptioningActive) {
-                            captionBtn.classList.add('active');
-                            overlay.style.display = 'block';
-                            subBox.innerText = "Initializing live tracking...";
-                            try { recognition.start(); } catch(e){}
-                        } else {
-                            captionBtn.classList.remove('active');
-                            overlay.style.display = 'none';
-                            try { recognition.stop(); } catch(e){}
-                        }
-                    });
-                    controlBar.el().appendChild(captionBtn);
-                }
-
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
                 downloadBtn.title = 'Source Link';
@@ -215,17 +153,6 @@ PLAYER_TEMPLATE = """
                     window.open("{{ target_url }}", '_blank');
                 });
                 controlBar.el().appendChild(downloadBtn);
-            });
-
-            // Synch browser transcriptions to playback runtime states
-            player.on('pause', function() {
-                if (isCaptioningActive && recognition) recognition.stop();
-            });
-
-            player.on('play', function() {
-                if (isCaptioningActive && recognition) {
-                    try { recognition.start(); } catch(e){}
-                }
             });
 
             player.on('canplay', function() {
@@ -265,7 +192,6 @@ def render_player():
     else:
         target_url = f"https://www.dailymotion.com/video/{user_input}"
 
-    # Stripped configuration: guarantees sub-second extraction performance execution
     ydl_opts = {
         'format': 'best/any', 
         'quiet': True,
@@ -281,7 +207,7 @@ def render_player():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
             if not info:
-                return "Extraction pipeline timeout.", 500
+                return "Extraction pipeline error.", 500
                 
             formats = info.get('formats', [])
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
@@ -291,7 +217,7 @@ def render_player():
                 m3u8_url = formats[-1].get('url')
 
             if not m3u8_url:
-                return "Stream path unallocated.", 404
+                return "Stream target not found.", 404
 
             return render_template_string(
                 PLAYER_TEMPLATE, 
@@ -310,7 +236,7 @@ def proxy_m3u8():
     raw_m3u8_url = request.args.get('url')
     priority = request.args.get('priority', 'standard')
     if not raw_m3u8_url:
-        return "Missing manifest reference", 400
+        return "Missing tracking parameters", 400
 
     raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -318,7 +244,7 @@ def proxy_m3u8():
     try:
         resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=3)
     except Exception:
-        return "Playlist request dropped.", 504
+        return "Upstream request dropped.", 504
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
     rewritten_lines = []
@@ -349,6 +275,8 @@ def proxy_m3u8():
             rewritten_lines.append(line_stripped)
 
     response = Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
+    # Added explicit CORS pass-through headers so VideoJS reads stream segments cleanly
+    response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
 
@@ -358,7 +286,7 @@ def proxy_ts_segment():
     raw_ts_url = request.args.get('url')
     priority = request.args.get('priority', 'standard')
     if not raw_ts_url:
-        return "Missing tracking parameters", 400
+        return "Missing parameter data", 400
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     headers = {
@@ -378,6 +306,7 @@ def proxy_ts_segment():
                 yield block
 
         response = Response(stream_ts_data(), content_type=content_type)
+        response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
     except Exception:
