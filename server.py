@@ -1,15 +1,17 @@
 import os
 import re
 import urllib.parse
-from flask import Flask, request, Response, render_template_string
+import time
+from flask import Flask, request, Response, render_template_string, jsonify
 import yt_dlp
 import requests
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
 
+# Ultra-high throughput network configuration
 http_pool = requests.Session()
-adapter = requests.adapters.HTTPAdapter(pool_connections=250, pool_maxsize=250, pool_block=False)
+adapter = requests.adapters.HTTPAdapter(pool_connections=500, pool_maxsize=500, pool_block=False)
 http_pool.mount('http://', adapter)
 http_pool.mount('https://', adapter)
 
@@ -69,14 +71,14 @@ PLAYER_TEMPLATE = """
         .video-js { width: 100% !important; height: 100% !important; background-color: #000 !important; }
         #video-loader {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #040406; z-index: 9999; 
-            display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.3s ease;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.2s ease;
         }
         .spinner {
-            box-sizing: border-box; width: 48px; height: 48px; border: 3px solid rgba(168, 85, 247, 0.1);
+            box-sizing: border-box; width: 44px; height: 44px; border: 3px solid rgba(168, 85, 247, 0.1);
             border-top: 3px solid #a855f7; border-radius: 50%; animation: spin 0.6s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .loader-text { margin-top: 16px; font-size: 0.75rem; font-weight: 600; color: #a1a1aa; letter-spacing: 1.5px; text-transform: uppercase; }
+        .loader-text { margin-top: 16px; font-size: 0.72rem; font-weight: 600; color: #a1a1aa; letter-spacing: 1.5px; text-transform: uppercase; }
         
         :root { --accent-color: #a855f7; --bar-bg: rgba(10, 10, 12, 0.75); --border-style: 1px solid rgba(255, 255, 255, 0.08); }
         .video-js .vjs-big-play-button {
@@ -105,7 +107,7 @@ PLAYER_TEMPLATE = """
             background-color: rgba(0, 0, 0, 0.75) !important;
             color: #ffffff !important;
             font-family: system-ui, sans-serif !important;
-            font-size: 1.2rem !important;
+            font-size: 1.25rem !important;
             border-radius: 4px;
         }
     </style>
@@ -114,13 +116,10 @@ PLAYER_TEMPLATE = """
     <div class="video-wrapper">
         <div id="video-loader">
             <div class="spinner"></div>
-            <div class="loader-text">Extracting Video Matrix</div>
+            <div class="loader-text">Instant Stream Activation</div>
         </div>
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
             <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}&cb={{ cb }}" type="application/x-mpegURL">
-            {% for sub in subtitles %}
-            <track kind="captions" src="{{ sub.url }}" srclang="{{ sub.lang }}" label="{{ sub.label }}" {% if loop.first %}default{% endif %}>
-            {% endfor %}
         </video>
     </div>
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
@@ -131,7 +130,7 @@ PLAYER_TEMPLATE = """
                 autoplay: true,
                 controls: true,
                 controlBar: {
-                    subsCapsButton: true // Restore stable built-in VideoJS track selection menu
+                    subsCapsButton: true // Native responsive menu
                 },
                 html5: {
                     vhs: {
@@ -143,12 +142,28 @@ PLAYER_TEMPLATE = """
                 }
             });
 
+            // LIVE IN-BROWSER ASYNC CAPTION INJECTION ENGINE
+            // Fetches subtitles in parallel so the player loads instantly without waiting
+            fetch("/captions?url=" + encodeURIComponent("{{ original_url }}"))
+                .then(response => response.json())
+                .then(tracks => {
+                    tracks.forEach((track, index) => {
+                        player.addRemoteTextTrack({
+                            kind: 'captions',
+                            src: track.url,
+                            srclang: track.lang,
+                            label: track.label,
+                            default: index === 0
+                        }, false);
+                    });
+                })
+                .catch(err => console.log("Live captions processing suspended:", err));
+
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
-                
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
-                downloadBtn.title = 'Source';
+                downloadBtn.title = 'Source Link';
                 downloadBtn.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>`;
                 downloadBtn.addEventListener('click', function() {
                     window.open("{{ target_url }}", '_blank');
@@ -160,7 +175,7 @@ PLAYER_TEMPLATE = """
                 const loader = document.getElementById('video-loader');
                 if (loader) {
                     loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 300);
+                    setTimeout(() => loader.remove(), 200);
                 }
                 player.play().catch(() => {
                     player.muted(true);
@@ -183,7 +198,7 @@ def render_player():
     user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
 
     if not user_input:
-        return "Missing tracking configuration parameter", 400
+        return "Missing tracking parameters", 400
 
     referer = request.headers.get("Referer", "")
     priority_flag = "high" if INTERNAL_INFRASTRUCTURE_HOST in referer else "standard"
@@ -193,24 +208,23 @@ def render_player():
     else:
         target_url = f"https://www.dailymotion.com/video/{user_input}"
 
+    # Optimized stripping configuration: drops sluggish heavy operations
     ydl_opts = {
         'format': 'best/any', 
         'quiet': True,
         'no_warnings': True,
         'skip_download': True,              
         'check_formats': 'cached',          
-        'extract_flat': False,
+        'extract_flat': 'in_playlist',
         'impersonate': ImpersonateTarget.from_str('chrome'),
-        'socket_timeout': 4,
-        'writesubtitles': True,  # Force metadata subtitle track extraction
-        'allsubtitles': True     
+        'socket_timeout': 2, # Drop dead sluggish connection paths instantly
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
             if not info:
-                return "Extraction failure response.", 500
+                return "Extraction framework exception.", 500
                 
             formats = info.get('formats', [])
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
@@ -220,44 +234,60 @@ def render_player():
                 m3u8_url = formats[-1].get('url')
 
             if not m3u8_url:
-                return "No video stream pathways isolated.", 404
+                return "Stream target mismatch.", 404
 
-            # Map the extracted track targets out cleanly
-            parsed_subs = []
-            extracted_subtitles = info.get('subtitles', {})
-            for lang, track_list in extracted_subtitles.items():
-                vtt_tracks = [t for t in track_list if t.get('ext') == 'vtt' or 'vtt' in str(t.get('url',''))]
-                if vtt_tracks:
-                    parsed_subs.append({
-                        'url': vtt_tracks[0].get('url'),
-                        'lang': lang,
-                        'label': lang.upper()
-                    })
-            
-            # Fallback to automatic captions if manual subtitles are empty
-            if not parsed_subs:
-                auto_subs = info.get('automatic_captions', {})
-                for lang, track_list in auto_subs.items():
-                    vtt_tracks = [t for t in track_list if t.get('ext') == 'vtt' or 'vtt' in str(t.get('url',''))]
-                    if vtt_tracks:
-                        parsed_subs.append({
-                            'url': vtt_tracks[0].get('url'),
-                            'lang': lang,
-                            'label': f"{lang.upper()} (Auto)"
-                        })
-
-            import time
             return render_template_string(
                 PLAYER_TEMPLATE, 
-                title=info.get('title', 'Native Video Player'),
+                title=info.get('title', 'Native Player Pipeline'),
                 target_url=m3u8_url,
+                original_url=target_url,
                 priority=priority_flag,
-                subtitles=parsed_subs,
                 cb=int(time.time())
             )
             
     except Exception as error:
-        return f"Extraction Pipeline Error: {str(error)}", 500
+        return f"Extraction Error Execution: {str(error)}", 500
+
+
+@app.route('/captions')
+def extract_live_captions():
+    """ Runs completely detached asynchronously from video loads to maintain maximum speed """
+    video_target = request.args.get('url')
+    if not video_target:
+        return jsonify([])
+
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,
+        'extract_flat': True,
+        'writesubtitles': True,
+        'allsubtitles': True,
+        'impersonate': ImpersonateTarget.from_str('chrome'),
+        'socket_timeout': 2
+    }
+
+    parsed_subs = []
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_target, download=False)
+            
+            subs = info.get('subtitles', {})
+            for lang, tracks in subs.items():
+                vtt = [t for t in tracks if 'vtt' in str(t.get('url',''))]
+                if vtt:
+                    parsed_subs.append({'url': vtt[0]['url'], 'lang': lang, 'label': lang.upper()})
+
+            if not parsed_subs:
+                auto = info.get('automatic_captions', {})
+                for lang, tracks in auto.items():
+                    vtt = [t for t in tracks if 'vtt' in str(t.get('url',''))]
+                    if vtt:
+                        parsed_subs.append({'url': vtt[0]['url'], 'lang': lang, 'label': f"{lang.upper()} (Auto)"})
+    except Exception:
+        pass # Silently drop caption errors to prevent crashing video playback loop
+
+    return jsonify(parsed_subs)
 
 
 @app.route('/manifest')
@@ -265,18 +295,18 @@ def proxy_m3u8():
     raw_m3u8_url = request.args.get('url')
     priority = request.args.get('priority', 'standard')
     if not raw_m3u8_url:
-        return "Missing source parameter context", 400
+        return "Missing stream path components", 400
 
     raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     
     try:
-        resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=4)
+        resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=3)
     except Exception:
-        return "Upstream playlist path connection timeout.", 504
+        return "Network Timeout", 504
 
     if resp.text.strip().startswith('{') or '"byteLength"' in resp.text:
-        return "Upstream manifest delivery synchronization layout exception.", 502
+        return "Stream segmentation wrapper configuration issue.", 502
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
     rewritten_lines = []
@@ -316,14 +346,14 @@ def proxy_ts_segment():
     raw_ts_url = request.args.get('url')
     priority = request.args.get('priority', 'standard')
     if not raw_ts_url:
-        return "Missing byte identifier destination", 400
+        return "Missing segment coordinates", 400
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': '*/*'
     }
-    timeout_val = 4 if priority == "high" else 5
+    timeout_val = 3 if priority == "high" else 4
     
     try:
         req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
@@ -332,14 +362,14 @@ def proxy_ts_segment():
             content_type = "video/mp4" if "fmp4" in raw_ts_url else "video/MP2T"
         
         def stream_ts_data():
-            for block in req.iter_content(chunk_size=1024 * 512):
+            for block in req.iter_content(chunk_size=1024 * 512): 
                 yield block
 
         response = Response(stream_ts_data(), content_type=content_type)
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
     except Exception:
-        return "Segment proxy transit failure", 502
+        return "Segment transit path broken", 502
 
 
 if __name__ == "__main__":
