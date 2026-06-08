@@ -8,7 +8,6 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
 
-# Fast-loading high-throughput network pool config
 http_pool = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
 http_pool.mount('http://', adapter)
@@ -107,14 +106,14 @@ PLAYER_TEMPLATE = """
         .video-js .vjs-play-progress:before { display: none !important; }
         .video-js .vjs-time-control { line-height: 48px !important; }
         
-        /* Custom UI Buttons Layout */
-        .vjs-download-control { 
+        /* Custom Control Bar Buttons Layout */
+        .vjs-download-control, .vjs-cc-toggle-btn { 
             cursor: pointer; display: flex; align-items: center; justify-content: center; width: 38px; height: 100%; order: 99; 
         }
-        .vjs-download-control svg { width: 18px; height: 18px; fill: #a1a1aa; transition: fill 0.2s, transform 0.2s; }
-        .vjs-download-control:hover svg { fill: #fff; transform: translateY(0.5px); }
+        .vjs-download-control svg, .vjs-cc-toggle-btn svg { width: 18px; height: 18px; fill: #a1a1aa; transition: fill 0.2s, transform 0.2s; }
+        .vjs-download-control:hover svg, .vjs-cc-toggle-btn:hover svg { fill: #fff; transform: translateY(0.5px); }
+        .vjs-cc-toggle-btn.active svg { fill: var(--accent-color) !important; }
 
-        /* Style native captions track cue displays */
         .video-js .vjs-text-track-cue {
             background-color: rgba(0, 0, 0, 0.75) !important;
             color: #ffffff !important;
@@ -137,19 +136,14 @@ PLAYER_TEMPLATE = """
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // Setup player with native controlbar component layers active
             const player = videojs('my-video', {
                 preload: 'auto',
                 autoplay: true,
                 controls: true,
-                controlBar: {
-                    // Force VideoJS to load its native, stable built-in captions options menu button
-                    subsCapsButton: true 
-                },
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 12, // Stable buffer allocation to avoid buffering stutter
+                        maxBufferLength: 12,
                         enableLowInitialPlaylist: true,
                         fastStart: true
                     }
@@ -159,7 +153,34 @@ PLAYER_TEMPLATE = """
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
                 
-                // Add custom secondary Direct Download action button component
+                # Manual Injected CC Button to show up instantly no matter what
+                const ccBtn = document.createElement('div');
+                ccBtn.className = 'vjs-cc-toggle-btn vjs-control vjs-button';
+                ccBtn.title = 'Toggle Captions';
+                ccBtn.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V9c0-.55.45-1 1-1h4c0 .55.45 1 1 1v2zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-4c-.55 0-1-.45-1-1V9c0-.55.45-1 1-1h4c0 .55.45 1 1 1v2z"/></svg>`;
+                
+                ccBtn.addEventListener('click', function() {
+                    const textTracks = player.textTracks();
+                    let tracksFound = false;
+
+                    for (let i = 0; i < textTracks.length; i++) {
+                        tracksFound = true;
+                        if (textTracks[i].mode === 'showing') {
+                            textTracks[i].mode = 'disabled';
+                            ccBtn.classList.remove('active');
+                        } else {
+                            textTracks[i].mode = 'showing';
+                            ccBtn.classList.add('active');
+                        }
+                    }
+
+                    # Fallback check if native tracks array isn't parsed yet
+                    if (!tracksFound) {
+                        alert("Captions are loading or not available for this stream context yet.");
+                    }
+                });
+                controlBar.el().appendChild(ccBtn);
+
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
                 downloadBtn.title = 'Source';
@@ -225,7 +246,7 @@ def render_player():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
             if not info:
-                return "Extraction envelope resolution error.", 500
+                return "Extraction failure.", 500
                 
             formats = info.get('formats', [])
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
@@ -245,7 +266,7 @@ def render_player():
             )
             
     except Exception as error:
-        return f"Extraction Error Pipeline Exception: {str(error)}", 500
+        return f"Extraction Error: {str(error)}", 500
 
 
 @app.route('/manifest')
@@ -308,12 +329,10 @@ def proxy_ts_segment():
     timeout_val = 3 if priority == "high" else 4
     
     try:
-        # Stream chunks with maximum frame acceleration parameters
         req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
         content_type = req.headers.get('Content-Type', 'video/MP2T')
         
         def stream_ts_data():
-            # Reset chunks to immediate high speed delivery blocks
             for block in req.iter_content(chunk_size=1024 * 128): 
                 yield block
 
@@ -321,7 +340,7 @@ def proxy_ts_segment():
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
     except Exception:
-        return "Segment connection dropped", 502
+        return "Segment dropped", 502
 
 
 if __name__ == "__main__":
