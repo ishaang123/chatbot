@@ -104,17 +104,18 @@ PLAYER_TEMPLATE = """
         .vjs-download-control:hover svg, .vjs-live-caption-btn:hover svg { fill: #fff; transform: translateY(0.5px); }
         .vjs-live-caption-btn.active svg { fill: var(--accent-color) !important; }
 
-        /* Custom overlay layout layer for live generated text streams */
+        /* Cleaned up subtitle presentation styles */
         #live-subtitle-overlay {
-            position: absolute; bottom: 80px; left: 5%; width: 90%; text-align: center;
+            position: absolute; bottom: 85px; left: 5%; width: 90%; text-align: center;
             z-index: 9; pointer-events: none; display: none;
         }
         .subtitle-text {
-            background-color: rgba(0, 0, 0, 0.75); color: #ffffff;
-            font-family: system-ui, -apple-system, sans-serif; font-size: 1.3rem;
-            font-weight: 500; padding: 6px 14px; border-radius: 6px;
-            display: inline-block; max-width: 85%; line-height: 1.4;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5); text-shadow: 0 1px 2px rgba(0,0,0,1);
+            background-color: rgba(0, 0, 0, 0.85); color: #ffffff;
+            font-family: system-ui, -apple-system, sans-serif; font-size: 1.25rem;
+            font-weight: 600; padding: 8px 16px; border-radius: 6px;
+            display: inline-block; max-width: 80%; line-height: 1.4;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+            letter-spacing: 0.3px;
         }
     </style>
 </head>
@@ -124,10 +125,10 @@ PLAYER_TEMPLATE = """
             <div class="spinner"></div>
             <div class="loader-text">Instant Stream Activation</div>
         </div>
-        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
+        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline crossorigin="anonymous">
             <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}&cb={{ cb }}" type="application/x-mpegURL">
         </video>
-        <div id="live-subtitle-overlay"><span class="subtitle-text" id="sub-box">Listening to audio stream...</span></div>
+        <div id="live-subtitle-overlay"><span class="subtitle-text" id="sub-box">...</span></div>
     </div>
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
@@ -146,7 +147,6 @@ PLAYER_TEMPLATE = """
                 }
             });
 
-            // LIVE IN-BROWSER WEB SPEECH CAPTION CORE
             let recognition = null;
             let isCaptioningActive = false;
             const overlay = document.getElementById('live-subtitle-overlay');
@@ -164,19 +164,32 @@ PLAYER_TEMPLATE = """
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
                         textSlice += event.results[i][0].transcript;
                     }
-                    subBox.innerText = textSlice;
                     
-                    // Auto-fade text strings after 4 seconds of speech silence
+                    // Keep sentences short by only displaying the trailing words
+                    let words = textSlice.trim().split(' ');
+                    if (words.length > 7) {
+                        words = words.slice(-7); 
+                    }
+                    
+                    let cleanedText = words.join(' ');
+                    if (cleanedText) {
+                        subBox.innerText = cleanedText;
+                        overlay.style.display = 'block';
+                    }
+                    
+                    // Fast text clearing: drops from 4 seconds down to 1.8 seconds of silence
                     clearTimeout(window.subTimeout);
                     window.subTimeout = setTimeout(() => {
-                        if(isCaptioningActive) subBox.innerText = "...";
-                    }, 4000);
+                        if(isCaptioningActive) {
+                            subBox.innerText = "";
+                            overlay.style.display = 'none';
+                        }
+                    }, 1800);
                 };
 
                 recognition.onend = function() {
-                    // Instantly reconnect if player loop is still playing back audio streams
                     if (isCaptioningActive && !player.paused()) {
-                        recognition.start();
+                        try { recognition.start(); } catch(e){}
                     }
                 };
             }
@@ -184,7 +197,6 @@ PLAYER_TEMPLATE = """
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
                 
-                // Add Live Captions Action Button
                 if (recognition) {
                     const captionBtn = document.createElement('div');
                     captionBtn.className = 'vjs-live-caption-btn vjs-control vjs-button';
@@ -195,12 +207,13 @@ PLAYER_TEMPLATE = """
                         isCaptioningActive = !isCaptioningActive;
                         if (isCaptioningActive) {
                             captionBtn.classList.add('active');
+                            subBox.innerText = "Listening...";
                             overlay.style.display = 'block';
-                            subBox.innerText = "Initializing live tracking...";
                             try { recognition.start(); } catch(e){}
                         } else {
                             captionBtn.classList.remove('active');
                             overlay.style.display = 'none';
+                            subBox.innerText = "";
                             try { recognition.stop(); } catch(e){}
                         }
                     });
@@ -217,9 +230,10 @@ PLAYER_TEMPLATE = """
                 controlBar.el().appendChild(downloadBtn);
             });
 
-            // Synch browser transcriptions to playback runtime states
             player.on('pause', function() {
-                if (isCaptioningActive && recognition) recognition.stop();
+                if (isCaptioningActive && recognition) {
+                    try { recognition.stop(); } catch(e){}
+                }
             });
 
             player.on('play', function() {
