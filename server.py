@@ -104,10 +104,11 @@ PLAYER_TEMPLATE = """
         .vjs-download-control:hover svg, .vjs-live-caption-btn:hover svg { fill: #fff; transform: translateY(0.5px); }
         .vjs-live-caption-btn.active svg { fill: var(--accent-color) !important; }
 
-        /* Cleaned up subtitle presentation styles */
+        /* Fixed structural sizing to stop visual bouncing/glitching */
         #live-subtitle-overlay {
             position: absolute; bottom: 85px; left: 5%; width: 90%; text-align: center;
             z-index: 9; pointer-events: none; display: none;
+            height: 40px;
         }
         .subtitle-text {
             background-color: rgba(0, 0, 0, 0.85); color: #ffffff;
@@ -156,16 +157,19 @@ PLAYER_TEMPLATE = """
                 const SpeechGen = window.SpeechRecognition || window.webkitSpeechRecognition;
                 recognition = new SpeechGen();
                 recognition.continuous = true;
-                recognition.interimResults = true;
+                
+                // CRITICAL FIX: Turn off interim results so the engine stops guessing live words back-and-forth
+                recognition.interimResults = false; 
                 recognition.lang = 'en-US';
 
                 recognition.onresult = function(event) {
                     let textSlice = '';
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        textSlice += event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            textSlice += event.results[i][0].transcript;
+                        }
                     }
                     
-                    // Keep sentences short by only displaying the trailing words
                     let words = textSlice.trim().split(' ');
                     if (words.length > 7) {
                         words = words.slice(-7); 
@@ -177,19 +181,20 @@ PLAYER_TEMPLATE = """
                         overlay.style.display = 'block';
                     }
                     
-                    // Fast text clearing: drops from 4 seconds down to 1.8 seconds of silence
                     clearTimeout(window.subTimeout);
                     window.subTimeout = setTimeout(() => {
                         if(isCaptioningActive) {
                             subBox.innerText = "";
                             overlay.style.display = 'none';
                         }
-                    }, 1800);
+                    }, 2200); // Slight delay bump to keep full phrases readable
                 };
 
                 recognition.onend = function() {
                     if (isCaptioningActive && !player.paused()) {
-                        try { recognition.start(); } catch(e){}
+                        setTimeout(() => {
+                            try { recognition.start(); } catch(e){}
+                        }, 100);
                     }
                 };
             }
