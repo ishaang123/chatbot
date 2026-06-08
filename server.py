@@ -8,6 +8,7 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
 
+# Fast high-throughput network connection pooling
 http_pool = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
 http_pool.mount('http://', adapter)
@@ -106,7 +107,7 @@ PLAYER_TEMPLATE = """
         .video-js .vjs-play-progress:before { display: none !important; }
         .video-js .vjs-time-control { line-height: 48px !important; }
         
-        /* Custom Control Bar Buttons Layout */
+        /* Custom UI Action Buttons Layout */
         .vjs-download-control, .vjs-cc-toggle-btn { 
             cursor: pointer; display: flex; align-items: center; justify-content: center; width: 38px; height: 100%; order: 99; 
         }
@@ -143,7 +144,7 @@ PLAYER_TEMPLATE = """
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 12,
+                        maxBufferLength: 15, // Smooth buffer to handle fast loads without network stutters
                         enableLowInitialPlaylist: true,
                         fastStart: true
                     }
@@ -153,7 +154,7 @@ PLAYER_TEMPLATE = """
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
                 
-                # Manual Injected CC Button to show up instantly no matter what
+                // Injected Captions Action Button Component
                 const ccBtn = document.createElement('div');
                 ccBtn.className = 'vjs-cc-toggle-btn vjs-control vjs-button';
                 ccBtn.title = 'Toggle Captions';
@@ -174,13 +175,13 @@ PLAYER_TEMPLATE = """
                         }
                     }
 
-                    # Fallback check if native tracks array isn't parsed yet
                     if (!tracksFound) {
-                        alert("Captions are loading or not available for this stream context yet.");
+                        console.log("No text tracks active yet.");
                     }
                 });
                 controlBar.el().appendChild(ccBtn);
 
+                // Source Downloader Action Button Component
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
                 downloadBtn.title = 'Source';
@@ -246,7 +247,7 @@ def render_player():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
             if not info:
-                return "Extraction failure.", 500
+                return "Extraction envelope resolution error.", 500
                 
             formats = info.get('formats', [])
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
@@ -256,7 +257,7 @@ def render_player():
                 m3u8_url = formats[-1].get('url')
 
             if not m3u8_url:
-                return "No stream targets discovered.", 404
+                return "No stream paths found.", 404
 
             return render_template_string(
                 PLAYER_TEMPLATE, 
@@ -266,7 +267,7 @@ def render_player():
             )
             
     except Exception as error:
-        return f"Extraction Error: {str(error)}", 500
+        return f"Extraction Pipeline Exception Error: {str(error)}", 500
 
 
 @app.route('/manifest')
@@ -333,14 +334,15 @@ def proxy_ts_segment():
         content_type = req.headers.get('Content-Type', 'video/MP2T')
         
         def stream_ts_data():
-            for block in req.iter_content(chunk_size=1024 * 128): 
+            # Standard rapid 256KB delivery blocks
+            for block in req.iter_content(chunk_size=1024 * 256): 
                 yield block
 
         response = Response(stream_ts_data(), content_type=content_type)
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
     except Exception:
-        return "Segment dropped", 502
+        return "Segment connection dropped", 502
 
 
 if __name__ == "__main__":
