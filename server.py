@@ -1,6 +1,5 @@
 import os
 import re
-import time
 import urllib.parse
 from flask import Flask, request, Response, render_template_string
 import yt_dlp
@@ -9,26 +8,26 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
 
-# Global Persistent Networking Session for high-speed connection reuse
+# Streamlined persistent network pool for proxy operations
 http_pool = requests.Session()
-adapter = requests.adapters.HTTPAdapter(pool_connections=150, pool_maxsize=150, pool_block=False)
+adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
 http_pool.mount('http://', adapter)
 http_pool.mount('https://', adapter)
 
-# Define your infrastructure identity to grant yourself structural priority transparently
 INTERNAL_INFRASTRUCTURE_HOST = "cggames.pythonanywhere.com"
 
 # --- UI TEMPLATES ---
+
 INDEX_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NebulaView Engine Core</title>
+    <title>NebulaView Core</title>
     <style>
         body {
-            background-color: #09090b;
+            background: radial-gradient(circle at center, #0c0a0f 0%, #050506 100%);
             color: #f4f4f5;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
@@ -36,39 +35,32 @@ INDEX_TEMPLATE = """
             align-items: center;
             height: 100vh;
             margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
         }
         .container {
-            max-width: 500px;
+            max-width: 420px;
             text-align: center;
             padding: 40px;
-            background: rgba(15, 15, 20, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 16px;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            background: rgba(10, 10, 12, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            backdrop-filter: blur(40px);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8);
         }
         h1 {
-            font-size: 1.8rem;
-            margin-bottom: 16px;
-            background: linear-gradient(135deg, #ff0055, #6366f1);
+            font-size: 2rem;
+            margin: 0 0 12px 0;
+            background: linear-gradient(135deg, #a855f7, #6366f1);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            letter-spacing: 1px;
+            font-weight: 800;
         }
-        p {
-            color: #a1a1aa;
-            line-height: 1.6;
-            font-size: 0.95rem;
-            margin-bottom: 24px;
-        }
+        p { color: #71717a; line-height: 1.6; font-size: 0.95rem; margin: 0; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>NebulaView Mobile</h1>
-        <p>This server functions as the high-velocity streaming matrix route environment for our players.</p>
+        <p>Pure Native Extraction Engine Active.</p>
     </div>
 </body>
 </html>
@@ -85,100 +77,48 @@ PLAYER_TEMPLATE = """
     <style>
         html, body { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
-            background-color: #030303; overflow: hidden; 
+            background-color: #020203; overflow: hidden; 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
-        .video-wrapper { 
-            position: relative; width: 100%; height: 100%; 
-            display: flex; justify-content: center; align-items: center;
-        }
-        .video-js { 
-            width: 100% !important; height: 100% !important; 
-            background-color: #000 !important;
-        }
+        .video-wrapper { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+        .video-js { width: 100% !important; height: 100% !important; background-color: #000 !important; }
         #video-loader {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            background: #09090b; z-index: 9999; 
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-            pointer-events: none;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #040406; z-index: 9999; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.3s ease;
         }
         .spinner {
-            box-sizing: border-box; width: 64px; height: 64px;
-            border: 4px solid rgba(99, 102, 241, 0.1);
-            border-top: 4px solid #6366f1;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+            box-sizing: border-box; width: 48px; height: 48px; border: 3px solid rgba(168, 85, 247, 0.1);
+            border-top: 3px solid #a855f7; border-radius: 50%; animation: spin 0.6s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .loader-text { 
-            margin-top: 22px; font-size: 0.8rem; font-weight: 600;
-            color: #ffffff; letter-spacing: 2px; text-transform: uppercase;
-        }
-        :root {
-            --brand-accent: #ff0055;
-            --glass-bg: rgba(15, 15, 20, 0.6);
-            --glass-border: rgba(255, 255, 255, 0.08);
-        }
+        .loader-text { margin-top: 16px; font-size: 0.75rem; font-weight: 600; color: #a1a1aa; letter-spacing: 1.5px; text-transform: uppercase; }
+        
+        :root { --accent-color: #a855f7; --bar-bg: rgba(10, 10, 12, 0.75); --border-style: 1px solid rgba(255, 255, 255, 0.08); }
         .video-js .vjs-big-play-button {
-            background: linear-gradient(135deg, rgba(255, 0, 85, 0.8), rgba(99, 102, 241, 0.8)) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            border-radius: 50% !important;
-            width: 76px !important; height: 76px !important;
-            line-height: 74px !important;
-            margin-top: -38px !important; margin-left: -38px !important;
-            backdrop-filter: blur(4px);
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(99, 102, 241, 0.9)) !important;
+            border: none !important; border-radius: 50% !important; width: 68px !important; height: 68px !important;
+            line-height: 68px !important; margin-top: -34px !important; margin-left: -34px !important;
+            box-shadow: 0 10px 25px rgba(168, 85, 247, 0.4); transition: transform 0.2s ease !important;
         }
+        .video-js:hover .vjs-big-play-button { transform: scale(1.08); }
         .video-js .vjs-control-bar {
-            background: var(--glass-bg) !important;
-            backdrop-filter: blur(20px) !important;
-            border: 1px solid var(--glass-border);
-            border-radius: 16px !important;
-            width: calc(100% - 32px) !important;
-            height: 54px !important;
-            bottom: 16px !important; left: 16px !important;
-            display: flex;
-            align-items: center;
+            background: var(--bar-bg) !important; backdrop-filter: blur(24px) !important; border: var(--border-style);
+            border-radius: 14px !important; width: calc(100% - 24px) !important; height: 48px !important; bottom: 12px !important; left: 12px !important;
         }
-        .video-js .vjs-progress-control {
-            position: absolute !important;
-            width: calc(100% - 32px) !important;
-            height: 5px !important;
-            top: -5px !important; left: 16px !important;
-        }
-        .video-js .vjs-play-progress {
-            background: linear-gradient(90deg, #6366f1, var(--brand-accent)) !important;
-            border-radius: 3px !important;
-        }
+        .video-js .vjs-progress-control { position: absolute !important; width: calc(100% - 24px) !important; height: 4px !important; top: -4px !important; left: 12px !important; }
+        .video-js .vjs-play-progress { background: linear-gradient(90deg, #6366f1, var(--accent-color)) !important; }
         .video-js .vjs-play-progress:before { display: none !important; }
-        .video-js .vjs-time-control { line-height: 54px !important; }
-
-        .vjs-download-control {
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 44px;
-            height: 100%;
-            order: 99;
-        }
-        .vjs-download-control svg {
-            width: 20px;
-            height: 20px;
-            fill: #d4d4d8;
-            transition: fill 0.2s ease, transform 0.2s ease;
-        }
-        .vjs-download-control:hover svg {
-            fill: var(--brand-accent);
-            transform: translateY(1px);
-        }
+        .video-js .vjs-time-control { line-height: 48px !important; }
+        .vjs-download-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
+        .vjs-download-control svg { width: 18px; height: 18px; fill: #a1a1aa; transition: fill 0.2s, transform 0.2s; }
+        .vjs-download-control:hover svg { fill: #fff; transform: translateY(0.5px); }
     </style>
 </head>
 <body>
     <div class="video-wrapper">
         <div id="video-loader">
             <div class="spinner"></div>
-            <div class="loader-text">Accelerating Playback Matrix</div>
+            <div class="loader-text">Extracting Video Matrix</div>
         </div>
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
             <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
@@ -194,9 +134,9 @@ PLAYER_TEMPLATE = """
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 60,
-                        liveBufferLength: 15,
-                        enableLowInitialPlaylist: false
+                        maxBufferLength: 30,
+                        enableLowInitialPlaylist: true,
+                        fastStart: true
                     }
                 }
             });
@@ -205,26 +145,14 @@ PLAYER_TEMPLATE = """
                 const controlBar = player.getChild('controlBar');
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
-                downloadBtn.title = 'Download Video Source File';
-                
-                downloadBtn.innerHTML = `
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/>
-                    </svg>
-                `;
-
+                downloadBtn.title = 'Source';
+                downloadBtn.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>`;
                 downloadBtn.addEventListener('click', function() {
                     const currentSrc = player.src();
                     const urlParams = new URLSearchParams(currentSrc.split('?')[1]);
                     const targetM3u8Url = urlParams.get('url');
-
-                    if (targetM3u8Url) {
-                        window.open(decodeURIComponent(targetM3u8Url), '_blank');
-                    } else {
-                        window.open(currentSrc, '_blank');
-                    }
+                    window.open(targetM3u8Url ? decodeURIComponent(targetM3u8Url) : currentSrc, '_blank');
                 });
-
                 controlBar.el().appendChild(downloadBtn);
             });
 
@@ -232,7 +160,7 @@ PLAYER_TEMPLATE = """
                 const loader = document.getElementById('video-loader');
                 if (loader) {
                     loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 400);
+                    setTimeout(() => loader.remove(), 300);
                 }
                 player.play().catch(() => {
                     player.muted(true);
@@ -257,80 +185,57 @@ def render_player():
     user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
 
     if not user_input:
-        return "Missing 'id_or_url' parameter.", 400
+        return "Missing identity context parameter.", 400
 
-    # Determine internal versus public resource origin matching
     referer = request.headers.get("Referer", "")
     priority_flag = "high" if INTERNAL_INFRASTRUCTURE_HOST in referer else "standard"
 
+    # Construct the exact URL for yt-dlp to evaluate natively
     if "dailymotion.com" in user_input:
         target_url = user_input if user_input.startswith(("http://", "https://")) else f"https://{user_input}"
     else:
         target_url = f"https://www.dailymotion.com/video/{user_input}"
 
-    # Pre-extract video ID for safe fallback paths
-    video_id = user_input.split("/video/")[-1].split("?")[0] if "/video/" in user_input else user_input
-
-    # Ultimate robust configuration strategy to target ANY format possible fast
+    # Highly stripped configuration flags designed purely to make yt-dlp stop scraping extraneous details
     ydl_opts = {
-        'format': 'best/bestvideo+bestaudio/any',  # Tells yt-dlp to literally grab whatever it can see
+        'format': 'best/any', 
         'quiet': True,
         'no_warnings': True,
+        'skip_download': True,              # Ensure absolutely no disk caching checks run
+        'check_formats': 'cached',          # Tells yt-dlp NOT to run network tests on discovered formats
         'extract_flat': False,
         'impersonate': ImpersonateTarget.from_str('chrome'),
-        'socket_timeout': 5,  # Dropped from 7 to 5 for faster fallback routing
-        'ignoreerrors': True  # Stop yt-dlp from throwing fatal hard exception stops
+        'socket_timeout': 3,                # Drop socket hanging instantly at the 3-second limit
     }
 
-    info = None
-    m3u8_url = None
-
-    # Tier 1 Fallback Try Layer
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
-            if info:
-                formats = info.get('formats', [])
-                hls_streams = []
-                for f in formats:
-                    fmt_url = f.get('url', '')
-                    fmt_id = str(f.get('format_id', '')).lower()
-                    fmt_proto = str(f.get('protocol', '')).lower()
-                    
-                    if 'm3u8' in fmt_url or 'm3u8' in fmt_proto or 'hls' in fmt_id:
-                        hls_streams.append(f)
+            
+            if not info:
+                return "yt_dlp failed to extract a valid metadata envelope.", 500
+                
+            formats = info.get('formats', [])
+            
+            # Filter specifically for the HLS manifest streams provided by the source platform
+            hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
+            m3u8_url = hls_streams[-1].get('url') if hls_streams else info.get('url')
 
-                if hls_streams:
-                    m3u8_url = hls_streams[-1].get('url')
-                else:
-                    m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
-    except Exception:
-        pass
+            if not m3u8_url and formats:
+                m3u8_url = formats[-1].get('url')
 
-    # Tier 2 Primary Protocol Fallback 
-    if not m3u8_url:
-        try:
-            ydl_opts['format'] = 'b'
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(target_url, download=False)
-                if info:
-                    formats = info.get('formats', [])
-                    m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
-        except Exception:
-            pass
+            if not m3u8_url:
+                return "No playable stream paths found within the yt_dlp response object.", 404
 
-    # Tier 3 Hard-coded CDN Engine Route Rule (Guarantees zero infinite spinners)
-    if not m3u8_url:
-        m3u8_url = f"https://www.dailymotion.com/cdn/manifest/video/{video_id}.m3u8"
-        if not info:
-            info = {'title': 'Dailymotion Stream (Fallback Stream Mode)'}
-
-    return render_template_string(
-        PLAYER_TEMPLATE, 
-        title=info.get('title', 'Dailymotion Stream') if info else 'Dailymotion Stream',
-        target_url=m3u8_url,
-        priority=priority_flag
-    )
+            return render_template_string(
+                PLAYER_TEMPLATE, 
+                title=info.get('title', 'Native Stream Source'),
+                target_url=m3u8_url,
+                priority=priority_flag
+            )
+            
+    except Exception as error:
+        return f"Extraction Pipeline Exception Error: {str(error)}", 500
 
 
 @app.route('/manifest')
@@ -338,12 +243,15 @@ def proxy_m3u8():
     raw_m3u8_url = request.args.get('url')
     priority = request.args.get('priority', 'standard')
     if not raw_m3u8_url:
-        return "Missing target reference", 400
+        return "Missing proxy reference targets", 400
 
     raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     
-    resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=5)
+    try:
+        resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=3)
+    except Exception:
+        return "Edge latency timeout during proxy resolution", 504
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
     rewritten_lines = []
@@ -359,18 +267,13 @@ def proxy_m3u8():
                 abs_url = urllib.parse.urljoin(base_url, rel_path)
                 proxy_route = "/manifest" if (".m3u8" in rel_path or "manifest" in rel_path) else "/segment"
                 return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}&priority={priority}"'
-
             line_stripped = re.sub(r'URI=(["\'].*?["\'])', replace_uri, line_stripped)
             rewritten_lines.append(line_stripped)
 
         elif not line_stripped.startswith('#'):
-            if not line_stripped.startswith(('http://', 'https://')):
-                full_url = urllib.parse.urljoin(base_url, line_stripped)
-            else:
-                full_url = line_stripped
-
+            full_url = line_stripped if line_stripped.startswith(('http://', 'https://')) else urllib.parse.urljoin(base_url, line_stripped)
             encoded_url = urllib.parse.quote_plus(full_url)
-
+            
             if '.m3u8' in line_stripped or 'manifest' in line_stripped:
                 rewritten_lines.append(f"/manifest?url={encoded_url}&priority={priority}")
             else:
@@ -379,7 +282,7 @@ def proxy_m3u8():
             rewritten_lines.append(line_stripped)
 
     response = Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
-    response.headers["Cache-Control"] = "public, max-age=2"
+    response.headers["Cache-Control"] = "public, max-age=3"
     return response
 
 
@@ -388,23 +291,26 @@ def proxy_ts_segment():
     raw_ts_url = request.args.get('url')
     priority = request.args.get('priority', 'standard')
     if not raw_ts_url:
-        return "Missing segment path", 400
+        return "Missing segment sequence indices", 400
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-
-    timeout_val = 4 if priority == "high" else 6
-    req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
-
-    def stream_ts_data():
-        for block in req.iter_content(chunk_size=1024 * 128):  # 128kb fast parsing blocks
-            yield block
-
-    content_type = req.headers.get('Content-Type', 'video/MP2T')
-    response = Response(stream_ts_data(), content_type=content_type)
+    timeout_val = 3 if priority == "high" else 4
     
-    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    return response
+    try:
+        req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
+        content_type = req.headers.get('Content-Type', 'video/MP2T')
+        
+        def stream_ts_data():
+            # Large 256KB block allocations for immediate frame buffer delivery
+            for block in req.iter_content(chunk_size=1024 * 256):
+                yield block
+
+        response = Response(stream_ts_data(), content_type=content_type)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+    except Exception:
+        return "Segment connection dropped", 502
 
 
 if __name__ == "__main__":
