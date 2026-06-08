@@ -1,6 +1,5 @@
 import os
 import re
-import time
 import urllib.parse
 from flask import Flask, request, Response, render_template_string
 import yt_dlp
@@ -9,6 +8,7 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
 
+# Fast-loading high-throughput network pool config
 http_pool = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
 http_pool.mount('http://', adapter)
@@ -107,22 +107,20 @@ PLAYER_TEMPLATE = """
         .video-js .vjs-play-progress:before { display: none !important; }
         .video-js .vjs-time-control { line-height: 48px !important; }
         
-        /* Custom Customization Layout Components */
-        .vjs-download-control, .vjs-custom-caption-control { 
+        /* Custom UI Buttons Layout */
+        .vjs-download-control { 
             cursor: pointer; display: flex; align-items: center; justify-content: center; width: 38px; height: 100%; order: 99; 
         }
-        .vjs-download-control svg, .vjs-custom-caption-control svg { width: 18px; height: 18px; fill: #a1a1aa; transition: fill 0.2s, transform 0.2s; }
-        .vjs-download-control:hover svg, .vjs-custom-caption-control:hover svg { fill: #fff; transform: translateY(0.5px); }
-        .vjs-custom-caption-control.active svg { fill: var(--accent-color); }
+        .vjs-download-control svg { width: 18px; height: 18px; fill: #a1a1aa; transition: fill 0.2s, transform 0.2s; }
+        .vjs-download-control:hover svg { fill: #fff; transform: translateY(0.5px); }
 
-        /* Style the actual on-screen subtitle lines */
+        /* Style native captions track cue displays */
         .video-js .vjs-text-track-cue {
             background-color: rgba(0, 0, 0, 0.75) !important;
             color: #ffffff !important;
             font-family: system-ui, sans-serif !important;
             font-size: 1.1rem !important;
             border-radius: 4px;
-            padding: 4px 8px !important;
         }
     </style>
 </head>
@@ -134,22 +132,24 @@ PLAYER_TEMPLATE = """
         </div>
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
             <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
-            {% if caption_url %}
-            <track kind="captions" src="/proxy-sub?url={{ caption_url | urlencode }}" srclang="en" label="English" id="eng-track">
-            {% endif %}
         </video>
     </div>
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
+            // Setup player with native controlbar component layers active
             const player = videojs('my-video', {
                 preload: 'auto',
                 autoplay: true,
                 controls: true,
+                controlBar: {
+                    // Force VideoJS to load its native, stable built-in captions options menu button
+                    subsCapsButton: true 
+                },
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 6,
+                        maxBufferLength: 12, // Stable buffer allocation to avoid buffering stutter
                         enableLowInitialPlaylist: true,
                         fastStart: true
                     }
@@ -159,36 +159,7 @@ PLAYER_TEMPLATE = """
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
                 
-                // 1. Setup Custom Captions Fetch/Toggle Button
-                const hasCaptions = {{ 'true' if caption_url else 'false' }};
-                if (hasCaptions) {
-                    const captionBtn = document.createElement('div');
-                    captionBtn.className = 'vjs-custom-caption-control vjs-control vjs-button';
-                    captionBtn.title = 'Toggle Closed Captions';
-                    captionBtn.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V9c0-.55xl.45-1 1-1h4c0 .55.45 1 1 1v2zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-4c-.55 0-1-.45-1-1V9c0-.55.45-1 1-1h4c0 .55.45 1 1 1v2z"/></svg>`;
-                    
-                    // Initially hide the track mode layer text properties
-                    const tracks = player.textTracks();
-                    for (let i = 0; i < tracks.length; i++) {
-                        tracks[i].mode = 'disabled';
-                    }
-
-                    captionBtn.addEventListener('click', function() {
-                        const track = player.textTracks()[0];
-                        if (track) {
-                            if (track.mode === 'showing') {
-                                track.mode = 'disabled';
-                                captionBtn.classList.remove('active');
-                            } else {
-                                track.mode = 'showing';
-                                captionBtn.classList.add('active');
-                            }
-                        }
-                    });
-                    controlBar.el().appendChild(captionBtn);
-                }
-
-                // 2. Setup Download Button Target Elements
+                // Add custom secondary Direct Download action button component
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
                 downloadBtn.title = 'Source';
@@ -229,7 +200,7 @@ def render_player():
     user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
 
     if not user_input:
-        return "Missing identity context parameter.", 400
+        return "Missing context identity parameter.", 400
 
     referer = request.headers.get("Referer", "")
     priority_flag = "high" if INTERNAL_INFRASTRUCTURE_HOST in referer else "standard"
@@ -246,8 +217,6 @@ def render_player():
         'skip_download': True,              
         'check_formats': 'cached',          
         'extract_flat': False,
-        'writeautomaticsub': True,          # Look for auto-generated metadata tracks natively
-        'subtitleslangs': ['en'],           # Limit extraction search array directly to English
         'impersonate': ImpersonateTarget.from_str('chrome'),
         'socket_timeout': 3,                
     }
@@ -256,7 +225,7 @@ def render_player():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
             if not info:
-                return "yt_dlp extraction failed.", 500
+                return "Extraction envelope resolution error.", 500
                 
             formats = info.get('formats', [])
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
@@ -265,25 +234,18 @@ def render_player():
             if not m3u8_url and formats:
                 m3u8_url = formats[-1].get('url')
 
-            # Extract caption references if available in yt_dlp object map
-            caption_url = None
-            subtitles = info.get('subtitles') or info.get('automatic_captions')
-            if subtitles and 'en' in subtitles:
-                # Select the vtt rendering format link directly
-                vtt_formats = [s for s in subtitles['en'] if s.get('ext') == 'vtt']
-                if vtt_formats:
-                    caption_url = vtt_formats[0].get('url')
+            if not m3u8_url:
+                return "No stream targets discovered.", 404
 
             return render_template_string(
                 PLAYER_TEMPLATE, 
                 title=info.get('title', 'Native Stream Source'),
                 target_url=m3u8_url,
-                caption_url=caption_url,
                 priority=priority_flag
             )
             
     except Exception as error:
-        return f"Extraction Error: {str(error)}", 500
+        return f"Extraction Error Pipeline Exception: {str(error)}", 500
 
 
 @app.route('/manifest')
@@ -291,7 +253,7 @@ def proxy_m3u8():
     raw_m3u8_url = request.args.get('url')
     priority = request.args.get('priority', 'standard')
     if not raw_m3u8_url:
-        return "Missing targets", 400
+        return "Missing tracking targets", 400
 
     raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -299,7 +261,7 @@ def proxy_m3u8():
     try:
         resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=3)
     except Exception:
-        return "Timeout", 504
+        return "Network Timeout", 504
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
     rewritten_lines = []
@@ -339,43 +301,27 @@ def proxy_ts_segment():
     raw_ts_url = request.args.get('url')
     priority = request.args.get('priority', 'standard')
     if not raw_ts_url:
-        return "Missing segment index", 400
+        return "Missing data reference", 400
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     timeout_val = 3 if priority == "high" else 4
     
     try:
+        # Stream chunks with maximum frame acceleration parameters
         req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
         content_type = req.headers.get('Content-Type', 'video/MP2T')
         
         def stream_ts_data():
-            for block in req.iter_content(chunk_size=1024 * 32): 
+            # Reset chunks to immediate high speed delivery blocks
+            for block in req.iter_content(chunk_size=1024 * 128): 
                 yield block
-                time.sleep(0.01)
 
         response = Response(stream_ts_data(), content_type=content_type)
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
     except Exception:
-        return "Segment dropped", 502
-
-
-@app.route('/proxy-sub')
-def proxy_subtitles():
-    """Proxies requested VTT files safely through backend engines on activation."""
-    sub_url = request.args.get('url')
-    if not sub_url:
-        return "Missing sub target parameter links", 400
-    
-    sub_url = urllib.parse.unquote(sub_url)
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    
-    try:
-        res = http_pool.get(sub_url, headers=headers, timeout=4)
-        return Response(res.text, content_type="text/vtt")
-    except Exception:
-        return "Sub extraction issue", 500
+        return "Segment connection dropped", 502
 
 
 if __name__ == "__main__":
