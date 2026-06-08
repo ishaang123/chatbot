@@ -8,7 +8,6 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
 
-# Fast high-throughput network connection pooling
 http_pool = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
 http_pool.mount('http://', adapter)
@@ -107,7 +106,6 @@ PLAYER_TEMPLATE = """
         .video-js .vjs-play-progress:before { display: none !important; }
         .video-js .vjs-time-control { line-height: 48px !important; }
         
-        /* Custom UI Action Buttons Layout */
         .vjs-download-control, .vjs-cc-toggle-btn { 
             cursor: pointer; display: flex; align-items: center; justify-content: center; width: 38px; height: 100%; order: 99; 
         }
@@ -144,7 +142,7 @@ PLAYER_TEMPLATE = """
                 html5: {
                     vhs: {
                         overrideNative: true,
-                        maxBufferLength: 15, // Smooth buffer to handle fast loads without network stutters
+                        maxBufferLength: 15,
                         enableLowInitialPlaylist: true,
                         fastStart: true
                     }
@@ -174,9 +172,8 @@ PLAYER_TEMPLATE = """
                             ccBtn.classList.add('active');
                         }
                     }
-
                     if (!tracksFound) {
-                        console.log("No text tracks active yet.");
+                        console.log("No text tracks detected.");
                     }
                 });
                 controlBar.el().appendChild(ccBtn);
@@ -222,7 +219,7 @@ def render_player():
     user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
 
     if not user_input:
-        return "Missing context identity parameter.", 400
+        return "Missing identity context context parameter.", 400
 
     referer = request.headers.get("Referer", "")
     priority_flag = "high" if INTERNAL_INFRASTRUCTURE_HOST in referer else "standard"
@@ -267,7 +264,7 @@ def render_player():
             )
             
     except Exception as error:
-        return f"Extraction Pipeline Exception Error: {str(error)}", 500
+        return f"Extraction Error: {str(error)}", 500
 
 
 @app.route('/manifest')
@@ -285,10 +282,15 @@ def proxy_m3u8():
     except Exception:
         return "Network Timeout", 504
 
+    # STOPS JSON LEAKING: Force clear textual manifest output extraction
+    manifest_text = resp.text
+    if manifest_text.strip().startswith('{'):
+        return "Error: Upstream returned JSON instead of raw M3U8 string streams.", 500
+
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
     rewritten_lines = []
 
-    for line in resp.text.splitlines():
+    for line in manifest_text.splitlines():
         line_stripped = line.strip()
         if not line_stripped:
             continue
@@ -313,6 +315,7 @@ def proxy_m3u8():
         else:
             rewritten_lines.append(line_stripped)
 
+    # Hard strict content type headers to force parsing correctly as continuous media streams
     response = Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
     response.headers["Cache-Control"] = "public, max-age=3"
     return response
@@ -334,7 +337,6 @@ def proxy_ts_segment():
         content_type = req.headers.get('Content-Type', 'video/MP2T')
         
         def stream_ts_data():
-            # Standard rapid 256KB delivery blocks
             for block in req.iter_content(chunk_size=1024 * 256): 
                 yield block
 
@@ -342,7 +344,7 @@ def proxy_ts_segment():
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
     except Exception:
-        return "Segment connection dropped", 502
+        return "Segment dropped", 502
 
 
 if __name__ == "__main__":
