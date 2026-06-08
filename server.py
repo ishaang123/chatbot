@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 # Global Persistent Networking Session for high-speed connection reuse
 http_pool = requests.Session()
-adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100, pool_block=False)
+adapter = requests.adapters.HTTPAdapter(pool_connections=150, pool_maxsize=150, pool_block=False)
 http_pool.mount('http://', adapter)
 http_pool.mount('https://', adapter)
 
@@ -75,6 +75,7 @@ INDEX_TEMPLATE = """
 """
 
 PLAYER_TEMPLATE = """
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -152,7 +153,6 @@ PLAYER_TEMPLATE = """
         .video-js .vjs-play-progress:before { display: none !important; }
         .video-js .vjs-time-control { line-height: 54px !important; }
 
-        /* --- STYLIZED DOWNLOAD COMPONENT ACTION PANEL --- */
         .vjs-download-control {
             cursor: pointer;
             display: flex;
@@ -160,7 +160,7 @@ PLAYER_TEMPLATE = """
             justify-content: center;
             width: 44px;
             height: 100%;
-            order: 99; /* Forces placement toward the right side of control panel */
+            order: 99;
         }
         .vjs-download-control svg {
             width: 20px;
@@ -201,39 +201,30 @@ PLAYER_TEMPLATE = """
                 }
             });
 
-            // Programmatic integration of the High-Velocity Download Engine
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
-                
-                // Create custom element component container
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
                 downloadBtn.title = 'Download Video Source File';
                 
-                // Neon UI download arrow icon design
                 downloadBtn.innerHTML = `
                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/>
                     </svg>
                 `;
 
-                // Fire high-speed payload extract mapping on user interaction
                 downloadBtn.addEventListener('click', function() {
-                    // Extract encoded master stream path assigned directly to playback element source
                     const currentSrc = player.src();
                     const urlParams = new URLSearchParams(currentSrc.split('?')[1]);
                     const targetM3u8Url = urlParams.get('url');
 
                     if (targetM3u8Url) {
-                        // Point client safely directly to the decrypted manifest route
                         window.open(decodeURIComponent(targetM3u8Url), '_blank');
                     } else {
-                        // Resilient fallback option to stream route address
                         window.open(currentSrc, '_blank');
                     }
                 });
 
-                // Attach button structure directly into VideoJS DOM layout tree
                 controlBar.el().appendChild(downloadBtn);
             });
 
@@ -277,52 +268,62 @@ def render_player():
     else:
         target_url = f"https://www.dailymotion.com/video/{user_input}"
 
+    # Pre-extract video ID for safe fallback paths
+    video_id = user_input.split("/video/")[-1].split("?")[0] if "/video/" in user_input else user_input
+
+    # Ultimate robust configuration strategy to target ANY format possible fast
     ydl_opts = {
-        'format': 'best',
+        'format': 'best/bestvideo+bestaudio/any',  # Tells yt-dlp to literally grab whatever it can see
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
         'impersonate': ImpersonateTarget.from_str('chrome'),
-        'socket_timeout': 7 # Aggressive network timeouts to speed up fallbacks
+        'socket_timeout': 5,  # Dropped from 7 to 5 for faster fallback routing
+        'ignoreerrors': True  # Stop yt-dlp from throwing fatal hard exception stops
     }
 
     info = None
     m3u8_url = None
 
+    # Tier 1 Fallback Try Layer
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
-            formats = info.get('formats', [])
-            
-            hls_streams = []
-            for f in formats:
-                fmt_url = f.get('url', '')
-                fmt_id = str(f.get('format_id', '')).lower()
-                fmt_proto = str(f.get('protocol', '')).lower()
-                
-                if 'm3u8' in fmt_url or 'm3u8' in fmt_proto or 'hls' in fmt_id:
-                    hls_streams.append(f)
+            if info:
+                formats = info.get('formats', [])
+                hls_streams = []
+                for f in formats:
+                    fmt_url = f.get('url', '')
+                    fmt_id = str(f.get('format_id', '')).lower()
+                    fmt_proto = str(f.get('protocol', '')).lower()
+                    
+                    if 'm3u8' in fmt_url or 'm3u8' in fmt_proto or 'hls' in fmt_id:
+                        hls_streams.append(f)
 
-            if hls_streams:
-                m3u8_url = hls_streams[-1].get('url')
-            else:
-                m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
-                
+                if hls_streams:
+                    m3u8_url = hls_streams[-1].get('url')
+                else:
+                    m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
     except Exception:
-        # Rapid programmatic layout fallback
+        pass
+
+    # Tier 2 Primary Protocol Fallback 
+    if not m3u8_url:
         try:
             ydl_opts['format'] = 'b'
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(target_url, download=False)
-                formats = info.get('formats', [])
-                m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
+                if info:
+                    formats = info.get('formats', [])
+                    m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
         except Exception:
-            video_id = user_input.split("/video/")[-1].split("?")[0] if "/video/" in user_input else user_input
-            m3u8_url = f"https://www.dailymotion.com/cdn/manifest/video/{video_id}.m3u8"
-            info = {'title': 'Dailymotion Stream (Fallback Mode)'}
+            pass
 
+    # Tier 3 Hard-coded CDN Engine Route Rule (Guarantees zero infinite spinners)
     if not m3u8_url:
-        return "Failed to find manifest endpoint maps.", 500
+        m3u8_url = f"https://www.dailymotion.com/cdn/manifest/video/{video_id}.m3u8"
+        if not info:
+            info = {'title': 'Dailymotion Stream (Fallback Stream Mode)'}
 
     return render_template_string(
         PLAYER_TEMPLATE, 
@@ -342,7 +343,6 @@ def proxy_m3u8():
     raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     
-    # Connection reused from high-speed socket pool
     resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=5)
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
@@ -379,8 +379,6 @@ def proxy_m3u8():
             rewritten_lines.append(line_stripped)
 
     response = Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
-    
-    # Client-side cache tuning to decrease player-to-proxy connection latency
     response.headers["Cache-Control"] = "public, max-age=2"
     return response
 
@@ -395,19 +393,16 @@ def proxy_ts_segment():
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-    # Connection reuse applied to chunks. 
-    # Optional performance optimization: allocation adjustments for 'high' priority pipeline paths
-    timeout_val = 4 if priority == "high" else 8
+    timeout_val = 4 if priority == "high" else 6
     req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
 
     def stream_ts_data():
-        for block in req.iter_content(chunk_size=1024 * 128): # Stream chunks doubled to 128kb for faster media parsing
+        for block in req.iter_content(chunk_size=1024 * 128):  # 128kb fast parsing blocks
             yield block
 
     content_type = req.headers.get('Content-Type', 'video/MP2T')
     response = Response(stream_ts_data(), content_type=content_type)
     
-    # Aggressively keep chunks cached at the browser layer for immediate processing
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
 
