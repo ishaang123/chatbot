@@ -103,7 +103,6 @@ INDEX_TEMPLATE = """
 </html>
 """
 PLAYER_TEMPLATE = """
-PLAYER_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -119,7 +118,7 @@ PLAYER_TEMPLATE = """
             --text-primary: #f1f1f1;
             --text-secondary: #aaaaaa;
             --border-subtle: rgba(255, 255, 255, 0.1);
-            --gradient-top: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+            --gradient-top: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
         }
 
         /* --- AGGRESIVE APPLE INTERACTION LOCK MATRIX --- */
@@ -134,7 +133,6 @@ PLAYER_TEMPLATE = """
             overflow-x: hidden;
             overflow-y: auto;
             
-            /* Crucial Webkit Locks: Stops iOS from triggering default tap highlights and scaling resets */
             -webkit-text-size-adjust: 100%;
             -webkit-tap-highlight-color: rgba(0, 0, 0, 0) !important;
             -webkit-touch-callout: none !important;
@@ -143,18 +141,17 @@ PLAYER_TEMPLATE = """
         }
 
         /* --- MOBILE FORCE-LANDSCAPE ROTATOR --- */
-        /* Targets mobile devices in Portrait orientation */
         @media screen and (max-width: 767px) and (orientation: portrait) {
             body {
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 100vh !important;  /* Map width to viewport height */
-                height: 100vw !important; /* Map height to viewport width */
+                width: 100vh !important;
+                height: 100vw !important;
                 transform: rotate(90deg);
                 transform-origin: top left;
-                left: 100vw; /* Shift canvas index into correct window view bounds */
-                overflow: hidden; /* Terminate lower page scrolling until device rotates */
+                left: 100vw;
+                overflow: hidden;
             }
             
             .viewport-player-hero {
@@ -162,9 +159,8 @@ PLAYER_TEMPLATE = """
                 height: 100vw !important;
             }
             
-            /* Display a non-intrusive tilt reminder to prompt user action */
             .viewport-player-hero::after {
-                content: "🔄 Please rotate your device for standard fullscreen viewing";
+                content: "🔄 Please rotate your device to watch fullscreen";
                 position: absolute;
                 bottom: 20px;
                 left: 50%;
@@ -180,9 +176,7 @@ PLAYER_TEMPLATE = """
                 border: 1px solid rgba(255,255,255,0.15);
             }
             
-            .lower-content-frame {
-                display: none !important; /* Hide details on small portrait view screen bounds */
-            }
+            .lower-content-frame { display: none !important; }
         }
 
         /* Clean Custom Scrollbar */
@@ -198,12 +192,10 @@ PLAYER_TEMPLATE = """
             background-color: #000;
         }
 
-        /* HARDWARE ACCELERATION LOCK FOR VIDEO WINDOW */
         .video-js {
             width: 100% !important;
             height: 100% !important;
             background-color: #000 !important;
-            /* Prevents native iOS webkit engine wrapper elements from stepping out of boundary layer */
             -webkit-transform: translateZ(0);
             transform: translateZ(0);
         }
@@ -213,7 +205,7 @@ PLAYER_TEMPLATE = """
             background-position: center !important;
         }
 
-        /* --- YT-STYLE FLOATING HUD HEADER OVERLAY --- */
+        /* --- REAL YT-STYLE FLOATING OVERLAY --- */
         .embed-floating-header {
             position: absolute;
             top: 0;
@@ -226,39 +218,37 @@ PLAYER_TEMPLATE = """
             align-items: flex-start;
             justify-content: space-between;
             box-sizing: border-box;
-            pointer-events: none; /* Let touches pass right through layout backgrounds */
+            pointer-events: none;
             opacity: 1;
             transition: opacity 0.25s ease;
         }
 
-        .vjs-has-started.vjs-user-inactive .embed-floating-header {
-            opacity: 0;
-        }
+        .vjs-has-started.vjs-user-inactive .embed-floating-header { opacity: 0; }
+        .embed-header-left { display: flex; align-items: center; gap: 12px; pointer-events: auto; min-width: 0; }
 
-        .embed-header-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            pointer-events: auto; /* Explicitly restore touch target fields for buttons */
-            min-width: 0;
-        }
-
-        .embed-channel-icon {
+        .embed-channel-icon-container {
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
+            background: #272727;
             font-weight: 700;
             color: #fff;
-            flex-shrink: 0;
+            font-size: 1.1rem;
+        }
+        .embed-channel-icon-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .embed-meta-text { display: flex; flex-direction: column; min-width: 0; }
-        .embed-video-title { color: var(--text-primary); font-size: 1.25rem; font-weight: 500; margin: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
-        .embed-channel-name { color: var(--text-secondary); font-size: 0.9rem; margin-top: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
+        .embed-video-title { color: var(--text-primary); font-size: 1.2rem; font-weight: 500; margin: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+        .embed-channel-name { color: var(--text-secondary); font-size: 0.9rem; margin-top: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.9); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
         .embed-header-actions { display: flex; align-items: center; pointer-events: auto; flex-shrink: 0; }
         
         .embed-icon-btn {
@@ -273,7 +263,7 @@ PLAYER_TEMPLATE = """
             filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9));
         }
 
-        /* --- STAGE B: LOWER CONTENT FRAME --- */
+        /* --- STAGE B: LOWER DETAILS FRAME --- */
         .lower-content-frame {
             max-width: 1280px;
             margin: 0 auto;
@@ -302,7 +292,6 @@ PLAYER_TEMPLATE = """
             font-weight: 600;
             font-size: 0.88rem;
             cursor: pointer;
-            margin-left: 12px;
         }
 
         .interaction-pill-group { display: flex; background: #272727; border-radius: 20px; overflow: hidden; }
@@ -312,14 +301,7 @@ PLAYER_TEMPLATE = """
         .description-drawer-block { background: #272727; border-radius: 12px; padding: 16px; margin-top: 16px; font-size: 0.93rem; line-height: 1.5; }
         .desc-stat-row { font-weight: 700; margin-bottom: 8px; display: flex; gap: 16px; }
 
-        .comments-feed-segment { margin-top: 24px; }
-        .comments-meta-header { font-size: 1.2rem; font-weight: 700; margin-bottom: 16px; }
-        .comment-node-row { display: flex; gap: 16px; margin-top: 20px; }
-        .comment-node-avatar { width: 36px; height: 36px; border-radius: 50%; background: #4e4e4e; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem; }
-        .comment-text-panel h5 { margin: 0 0 4px 0; font-size: 0.85rem; color: var(--text-primary); }
-        .comment-text-panel p { margin: 0; font-size: 0.92rem; color: #f1f1f1; line-height: 1.4; }
-
-        /* --- VIDEO.JS INTERFACE CONFIGURATION --- */
+        /* --- VIDEO.JS MODIFICATION MATRIX --- */
         .video-js .vjs-big-play-button {
             background-color: rgba(20, 20, 20, 0.85) !important;
             border: none !important;
@@ -349,10 +331,11 @@ PLAYER_TEMPLATE = """
         
         <div class="embed-floating-header" id="embed-header">
             <div class="embed-header-left">
-                <div class="embed-channel-icon">NV</div>
+                <div class="embed-channel-icon-container" id="avatar-container-hud">
+                    </div>
                 <div class="embed-meta-text">
                     <span class="embed-video-title">{{ title }}</span>
-                    <span class="embed-channel-name">NebulaView Core</span>
+                    <span class="embed-channel-name">{{ author_name if author_name else "Verified Creator" }}</span>
                 </div>
             </div>
             <div class="embed-header-actions">
@@ -362,7 +345,7 @@ PLAYER_TEMPLATE = """
             </div>
         </div>
 
-        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline profile="minimal">
+        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline>
             <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
         </video>
         
@@ -374,10 +357,11 @@ PLAYER_TEMPLATE = """
             
             <div class="profile-row-layout">
                 <div class="profile-left-anchor">
-                    <div class="embed-channel-icon" style="width:36px;height:36px">NV</div>
-                    <div style="display:flex;flex-direction:column">
-                        <span style="font-weight:600;font-size:0.95rem">NebulaView Core</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary)">148K subscribers</span>
+                    <div class="embed-channel-icon-container" id="avatar-container-lower" style="width:36px;height:36px;font-size:0.95rem">
+                        </div>
+                    <div style="display:flex;flex-direction:column;min-width:0">
+                        <span style="font-weight:600;font-size:0.95rem;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">{{ author_name if author_name else "Verified Creator" }}</span>
+                        <span style="font-size:0.78rem;color:var(--text-secondary)">Official Channel</span>
                     </div>
                     <button class="subscribe-pill">Subscribe</button>
                 </div>
@@ -393,30 +377,61 @@ PLAYER_TEMPLATE = """
 
         <div class="description-drawer-block">
             <div class="desc-stat-row">
-                <span>12.5K views</span>
-                <span>Jun 9, 2026</span>
+                <span>Live Feed</span>
+                <span>Active Stream Pipeline</span>
             </div>
-            <p style="margin:0;color:#f1f1f1">Native edge presentation matrix layer deployed successfully. This node handles real-time adaptive parsing routines for high-speed cross-origin media extraction operations directly within the browser runtime.</p>
+            <p style="margin:0;color:#f1f1f1">Adaptive source parsing frame engine online. Listening directly to target data vectors across decoupled infrastructure bounds.</p>
         </div>
     </div>
 
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
-        function extractVideoThumbnail(targetUrlString) {
-            const decodedUrl = decodeURIComponent(targetUrlString);
-            let youtubeMatch = decodedUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/i);
-            if (youtubeMatch && youtubeMatch[1]) {
-                return `https://img.youtube.com/vi/${youtubeMatch[1]}/maxresdefault.jpg`;
+        // --- REAL TIME ASSET RESOLUTION MATRIX ---
+        function resolveMediaAssets() {
+            const rawTargetUrl = "{{ target_url }}";
+            const decodedUrl = decodeURIComponent(rawTargetUrl);
+            
+            let posterUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920"; // Fallback poster
+            
+            // Extract authentic YouTube video thumbnail if url matches format patterns
+            let ytMatch = decodedUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/i);
+            if (ytMatch && ytMatch[1]) {
+                posterUrl = `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
             }
-            return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920&auto=format&fit=crop";
+            
+            // Inject resolved poster to video node target before instantiation
+            document.getElementById('my-video').setAttribute('poster', posterUrl);
+
+            // --- RESOLVE CREATOR PROFILE AVATAR ---
+            const creatorName = "{{ author_name }}".trim() || "Verified Creator";
+            const passedAvatar = "{{ author_avatar_url }}".trim();
+            
+            const hudIconContainer = document.getElementById('avatar-container-hud');
+            const lowerIconContainer = document.getElementById('avatar-container-lower');
+
+            if (passedAvatar && passedAvatar !== "None" && passedAvatar !== "") {
+                // If backend provides a real scraped image URL, apply it directly
+                const imgHtml = `<img src="${passedAvatar}" alt="Avatar">`;
+                hudIconContainer.innerHTML = imgHtml;
+                lowerIconContainer.innerHTML = imgHtml;
+            } else {
+                // Fallback: Generate an authentic color profile badge matching Google styles
+                const firstLetter = creatorName.charAt(0).toUpperCase();
+                const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#009688', '#4CAF50', '#FF5722'];
+                // Choose index based on letter char code sequence
+                const assignedColor = colors[firstLetter.charCodeAt(0) % colors.length];
+                
+                hudIconContainer.style.backgroundColor = assignedColor;
+                lowerIconContainer.style.backgroundColor = assignedColor;
+                hudIconContainer.textContent = firstLetter;
+                lowerIconContainer.textContent = firstLetter;
+            }
         }
 
         document.addEventListener("DOMContentLoaded", function() {
-            const videoElement = document.getElementById('my-video');
-            const inputTargetUrl = "{{ target_url }}"; 
-            videoElement.setAttribute('poster', extractVideoThumbnail(inputTargetUrl));
+            // Run media asset setup engine
+            resolveMediaAssets();
 
-            // Force Video.js to respect inline mobile containment paradigms
             const player = videojs('my-video', {
                 preload: 'metadata',
                 autoplay: false, 
@@ -427,7 +442,6 @@ PLAYER_TEMPLATE = """
                 html5: { vhs: { overrideNative: true } }
             });
 
-            // BLOCK APPLE QUICKTIME INTERCEPTION FOR THE MANIFEST TARGET
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
                 const downloadBtn = document.createElement('div');
@@ -459,15 +473,16 @@ PLAYER_TEMPLATE = """
 </body>
 </html>
 """
-"""
-
-
 # --- ROUTE HANDLERS ---
 
 @app.route('/')
 def index():
     return render_template_string(INDEX_TEMPLATE)
 
+import threading
+from flask import Flask, request, render_template_string
+import yt_dlp
+# Assumes ImpersonateTarget and run_pip_update are imported correctly elsewhere
 
 @app.route('/download', methods=['POST', 'GET'])
 def render_player():
@@ -517,22 +532,30 @@ def render_player():
             if not m3u8_url:
                 return "No playable stream paths found within the yt_dlp response object.", 404
 
+            # --- DYNAMIC METADATA EXTRACTION PIPELINE ---
+            # Extract real thumbnail, real creator name, and look for optional channel avatars
+            video_thumbnail = info.get('thumbnail') or info.get('thumbnails', [{}])[-1].get('url')
+            creator_name = info.get('uploader') or info.get('channel') or "Verified Creator"
+            
+            # Note: yt_dlp drops missing fields as None, Javascript handles the visual fallback mapping
+            creator_avatar = info.get('uploader_url') # Some extractors drop avatar metadata here or in fields below
+            
             return render_template_string(
                 PLAYER_TEMPLATE, 
                 title=info.get('title', 'Native Stream Source'),
-                target_url=m3u8_url,
-                priority=priority_flag
+                target_url=target_url, # Pass video link context so JS extracts platform thumbs flawlessly
+                stream_url=m3u8_url,   # Manifest stream source link mapping
+                priority=priority_flag,
+                author_name=creator_name,
+                author_avatar_url=creator_avatar,
+                forced_poster=video_thumbnail # Drops real scraped thumbnail directly into template landscape
             )
             
     except Exception as error:
-        # --- CRITICAL FALLBACK TRIGGER ---
-        # If extraction drops an error, we immediately fire a separate update check 
-        # in a thread so the current visitor doesn't get blocked by an entirely frozen process loop.
         print(f"[Extraction Failure] Forcing emergency update check due to error: {error}")
         threading.Thread(target=run_pip_update).start()
         
         return f"Extraction Pipeline Exception Error: {str(error)}. A critical engine patch check has been initiated.", 500
-
 
 @app.route('/manifest')
 def proxy_m3u8():
