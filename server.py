@@ -67,6 +67,75 @@ INDEX_TEMPLATE = """
 </html>
 """
 
+import os
+import re
+import sys
+import subprocess
+import threading
+import time
+import urllib.parse
+import requests
+from flask import Flask, request, Response, render_template_string
+import yt_dlp
+from yt_dlp.networking.impersonate import ImpersonateTarget
+
+update_lock = threading.Lock()
+
+def run_pip_update():
+    if update_lock.locked():
+        return
+    with update_lock:
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception:
+            pass
+
+def upgrade_extractor_engine_loop():
+    time.sleep(5)
+    while True:
+        run_pip_update()
+        time.sleep(7200)
+
+threading.Thread(target=upgrade_extractor_engine_loop, daemon=True).start()
+
+app = Flask(__name__)
+
+http_pool = requests.Session()
+adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
+http_pool.mount('http://', adapter)
+http_pool.mount('https://', adapter)
+
+INTERNAL_INFRASTRUCTURE_HOST = "cggames.pythonanywhere.com"
+
+INDEX_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NebulaView Core</title>
+    <style>
+        body {
+            background: radial-gradient(circle at center, #0c0a0f 0%, #050506 100%);
+            color: #f4f4f5;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>NebulaView Mobile Active</h1>
+</body>
+</html>
+"""
+
 PLAYER_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -425,6 +494,157 @@ PLAYER_TEMPLATE = """
 </body>
 </html>
 """
+
+@app.route('/')
+def index():
+    return render_template_string(INDEX_TEMPLATE)
+
+@app.route('/download', methods=['POST', 'GET'])
+def render_player():
+    user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
+
+    if not user_input:
+        return "Missing identity context parameter.", 400
+
+    referer = request.headers.get("Referer", "")
+    priority_flag = "high" if INTERNAL_INFRASTRUCTURE_HOST in referer else "standard"
+
+    video_id_match = re.search(r'(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)', user_input)
+    clean_video_id = video_id_match.group(1) if video_id_match else user_input
+
+    if "dailymotion.com" in user_input or "dai.ly" in user_input:
+        target_url = user_input if user_input.startswith(("http://", "https://")) else f"https://{user_input}"
+    else:
+        target_url = f"https://www.dailymotion.com/video/{clean_video_id}"
+
+    ydl_opts = {
+        'format': 'best/any', 
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,              
+        'check_formats': 'cached',          
+        'extract_flat': False,
+        'impersonate': ImpersonateTarget.from_str('chrome'),
+        'socket_timeout': 5,                
+        'extractor_args': {'dailymotion': {'pubkey': ['']}},
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(target_url, download=False)
+            if not info:
+                return "Extraction failed.", 500
+                
+            formats = info.get('formats', [])
+            hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
+            m3u8_url = hls_streams[-1].get('url') if hls_streams else info.get('url')
+
+            if not m3u8_url and formats:
+                m3u8_url = formats[-1].get('url')
+
+            if not m3u8_url:
+                return "No playable stream paths found.", 404
+
+            video_thumbnail = info.get('thumbnail') or (info.get('thumbnails') and info.get('thumbnails')[-1].get('url')) or ""
+            creator_name = info.get('uploader') or info.get('channel') or "Verified Creator"
+            creator_avatar = info.get('uploader_url') or "" 
+            
+            return render_template_string(
+                PLAYER_TEMPLATE, 
+                title=info.get('title', 'Native Stream Source'),
+                current_video_id=clean_video_id,
+                target_url=target_url, 
+                stream_url=m3u8_url,   
+                priority=priority_flag,
+                author_name=creator_name,
+                author_avatar_url=creator_avatar,
+                forced_poster=video_thumbnail 
+            )
+            
+    except Exception as error:
+        threading.Thread(target=run_pip_update).start()
+        return f"Extraction Pipeline Exception Error: {str(error)}", 500
+
+@app.route('/manifest')
+def proxy_m3u8():
+    raw_m3u8_url = request.args.get('url')
+    priority = request.args.get('priority', 'standard')
+    if not raw_m3u8_url:
+        return "Missing proxy targets", 400
+
+    raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*',
+    }
+    
+    try:
+        resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=4)
+    except Exception:
+        return "Timeout during proxy resolution", 504
+
+    base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
+    rewritten_lines = []
+
+    for line in resp.text.splitlines():
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+
+        if 'URI=' in line_stripped:
+            def replace_uri(match):
+                rel_path = match.group(1).strip('"\'')
+                abs_url = urllib.parse.urljoin(base_url, rel_path)
+                proxy_route = "/manifest" if (".m3u8" in rel_path or "manifest" in rel_path) else "/segment"
+                return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}&priority={priority}"'
+            line_stripped = re.sub(r'URI=(["\'].*?["\'])', replace_uri, line_stripped)
+            rewritten_lines.append(line_stripped)
+
+        elif not line_stripped.startswith('#'):
+            full_url = line_stripped if line_stripped.startswith(('http://', 'https://')) else urllib.parse.urljoin(base_url, line_stripped)
+            encoded_url = urllib.parse.quote_plus(full_url)
+            if '.m3u8' in line_stripped or 'manifest' in line_stripped:
+                rewritten_lines.append(f"/manifest?url={encoded_url}&priority={priority}")
+            else:
+                rewritten_lines.append(f"/segment?url={encoded_url}&priority={priority}")
+        else:
+            rewritten_lines.append(line_stripped)
+
+    response = Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
+    response.headers["Cache-Control"] = "public, max-age=3"
+    return response
+
+@app.route('/segment')
+def proxy_ts_segment():
+    raw_ts_url = request.args.get('url')
+    priority = request.args.get('priority', 'standard')
+    if not raw_ts_url:
+        return "Missing segment sequence indices", 400
+
+    raw_ts_url = urllib.parse.unquote(raw_ts_url)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*',
+    }
+    timeout_val = 4 if priority == "high" else 5
+    
+    try:
+        req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
+        content_type = req.headers.get('Content-Type', 'video/MP2T')
+        
+        def stream_ts_data():
+            for block in req.iter_content(chunk_size=1024 * 256):
+                yield block
+
+        response = Response(stream_ts_data(), content_type=content_type)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+    except Exception:
+        return "Segment connection dropped", 502
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, threaded=True)
 
 @app.route('/')
 def index():
