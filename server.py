@@ -67,75 +67,6 @@ INDEX_TEMPLATE = """
 </html>
 """
 
-import os
-import re
-import sys
-import subprocess
-import threading
-import time
-import urllib.parse
-import requests
-from flask import Flask, request, Response, render_template_string
-import yt_dlp
-from yt_dlp.networking.impersonate import ImpersonateTarget
-
-update_lock = threading.Lock()
-
-def run_pip_update():
-    if update_lock.locked():
-        return
-    with update_lock:
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-        except Exception:
-            pass
-
-def upgrade_extractor_engine_loop():
-    time.sleep(5)
-    while True:
-        run_pip_update()
-        time.sleep(7200)
-
-threading.Thread(target=upgrade_extractor_engine_loop, daemon=True).start()
-
-app = Flask(__name__)
-
-http_pool = requests.Session()
-adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
-http_pool.mount('http://', adapter)
-http_pool.mount('https://', adapter)
-
-INTERNAL_INFRASTRUCTURE_HOST = "cggames.pythonanywhere.com"
-
-INDEX_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>NebulaView Core</title>
-    <style>
-        body {
-            background: radial-gradient(circle at center, #0c0a0f 0%, #050506 100%);
-            color: #f4f4f5;
-            font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-    </style>
-</head>
-<body>
-    <h1>NebulaView Mobile Active</h1>
-</body>
-</html>
-"""
-
 PLAYER_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -165,21 +96,40 @@ PLAYER_TEMPLATE = """
             user-select: none;
         }
 
-        /* --- STAGE: FULL SCREEN VIEWPORT MANAGEMENT --- */
+        /* --- STAGE: VIEWPORT MANAGEMENT --- */
         .viewport-player-hero {
-            position: fixed; /* Lock container tight over layout matrix */
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 450px;
+            margin: 0 auto;
             background-color: #000;
             z-index: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            transition: all 0.25s ease;
         }
 
-        /* Force Video.js to fill out the entirety of the fixed viewport window */
+        /* Our Custom Viewport Override Layer */
+        .viewport-player-hero.pseudo-fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            z-index: 99999 !important;
+        }
+
+        @media (max-width: 768px) {
+            .viewport-player-hero {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                max-width: 100vw;
+            }
+        }
+
         .video-js {
             width: 100% !important;
             height: 100% !important;
@@ -193,7 +143,6 @@ PLAYER_TEMPLATE = """
             background-color: #000 !important;
         }
 
-        /* Ensure aspect ratio handles 16:9 or 9:16 cleanly inside frame */
         .video-js video { 
             object-fit: contain !important;
             width: 100% !important;
@@ -245,7 +194,7 @@ PLAYER_TEMPLATE = """
             filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); pointer-events: auto;
         }
 
-        /* --- CUSTOM OVER-EVERYTHING END SCREEN OVERLAY --- */
+        /* --- INTERACTIVE END SCREEN --- */
         .player-endscreen-overlay {
             position: absolute;
             top: 0;
@@ -253,7 +202,7 @@ PLAYER_TEMPLATE = """
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.92);
-            z-index: 12; /* Places it securely on top of Video.js elements */
+            z-index: 12; 
             display: none; 
             flex-direction: column;
             justify-content: center;
@@ -281,7 +230,6 @@ PLAYER_TEMPLATE = """
             width: 100%;
             max-width: 720px;
             overflow-y: auto;
-            padding-right: 4px;
         }
 
         @media (max-width: 560px) {
@@ -329,7 +277,7 @@ PLAYER_TEMPLATE = """
         }
         .endscreen-v-creator { font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* --- VIDEO.JS INTERFACE MODIFICATIONS --- */
+        /* --- VIDEO.JS INTERFACE MODIFICATION MATRIX --- */
         .video-js .vjs-big-play-button {
             background-color: rgba(20, 20, 20, 0.85) !important; border: none !important; border-radius: 12px !important;
             width: 68px !important; height: 48px !important; line-height: 48px !important; margin-top: -24px !important; margin-left: -34px !important; z-index: 11;
@@ -340,11 +288,12 @@ PLAYER_TEMPLATE = """
         .video-js .vjs-play-progress { background: var(--accent-primary) !important; }
         .video-js .vjs-slider { background-color: rgba(255,255,255,0.2) !important; }
         
-        /* Hide native browser fullscreen controls so users rely exclusively on our custom implementation */
+        /* Suppress standard control items that trigger mobile layout takeovers */
         .video-js .vjs-fullscreen-control { display: none !important; }
         
-        .vjs-download-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
-        .vjs-download-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; }
+        .vjs-download-control, .vjs-custom-fullscreen-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
+        .vjs-download-control svg, .vjs-custom-fullscreen-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; }
+        .vjs-download-control svg:hover, .vjs-custom-fullscreen-control svg:hover { opacity: 1; }
     </style>
 </head>
 <body>
@@ -368,8 +317,7 @@ PLAYER_TEMPLATE = """
 
         <div class="player-endscreen-overlay" id="endscreen-display">
             <div class="endscreen-title">Up Next</div>
-            <div class="endscreen-grid" id="endscreen-grid-items">
-                </div>
+            <div class="endscreen-grid" id="endscreen-grid-items"></div>
         </div>
 
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline></video>
@@ -433,7 +381,7 @@ PLAYER_TEMPLATE = """
                     document.getElementById('endscreen-display').style.display = 'flex';
                 }
             } catch(e) {
-                console.error("Delayed endscreen exception:", e);
+                console.error("Delayed endscreen engine exception:", e);
             }
         }
 
@@ -444,7 +392,7 @@ PLAYER_TEMPLATE = """
                 preload: 'auto',
                 autoplay: false, 
                 controls: true,
-                fluid: false, // Turned off fluid configuration to let CSS rule over layout sizes
+                fluid: false, 
                 playsinline: true, 
                 webkitPlaysinline: true,
                 controlBar: {
@@ -468,6 +416,12 @@ PLAYER_TEMPLATE = """
 
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
+                
+                player.isFullscreen = function() {
+                    return document.getElementById('player-view-wrapper').classList.contains('pseudo-fullscreen');
+                };
+
+                // 1. INJECT NATIVE DOWNLOAD INTERACTION PATHWAY
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
                 downloadBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>`;
@@ -476,9 +430,20 @@ PLAYER_TEMPLATE = """
                 const urlParams = new URLSearchParams(currentSrc.split('?')[1]);
                 const targetM3u8Url = urlParams.get('url');
                 const decodedUrl = targetM3u8Url ? decodeURIComponent(targetM3u8Url) : currentSrc;
-
                 downloadBtn.addEventListener('click', function() { window.open(decodedUrl, '_blank'); });
                 controlBar.el().appendChild(downloadBtn);
+
+                // 2. INJECT PERSISTENT PSEUDO FULLSCREEN ENGINE INTERACTION BUTTON
+                const fsBtn = document.createElement('div');
+                fsBtn.className = 'vjs-custom-fullscreen-control vjs-control vjs-button';
+                fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
+                
+                fsBtn.addEventListener('click', function() {
+                    const wrapper = document.getElementById('player-view-wrapper');
+                    wrapper.classList.toggle('pseudo-fullscreen');
+                    window.dispatchEvent(new Event('resize'));
+                });
+                controlBar.el().appendChild(fsBtn);
             });
 
             document.getElementById('embed-share-btn').addEventListener('click', function() {
@@ -494,157 +459,6 @@ PLAYER_TEMPLATE = """
 </body>
 </html>
 """
-
-@app.route('/')
-def index():
-    return render_template_string(INDEX_TEMPLATE)
-
-@app.route('/download', methods=['POST', 'GET'])
-def render_player():
-    user_input = request.form.get('id_or_url', '').strip() if request.method == 'POST' else request.args.get('id_or_url', '').strip()
-
-    if not user_input:
-        return "Missing identity context parameter.", 400
-
-    referer = request.headers.get("Referer", "")
-    priority_flag = "high" if INTERNAL_INFRASTRUCTURE_HOST in referer else "standard"
-
-    video_id_match = re.search(r'(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)', user_input)
-    clean_video_id = video_id_match.group(1) if video_id_match else user_input
-
-    if "dailymotion.com" in user_input or "dai.ly" in user_input:
-        target_url = user_input if user_input.startswith(("http://", "https://")) else f"https://{user_input}"
-    else:
-        target_url = f"https://www.dailymotion.com/video/{clean_video_id}"
-
-    ydl_opts = {
-        'format': 'best/any', 
-        'quiet': True,
-        'no_warnings': True,
-        'skip_download': True,              
-        'check_formats': 'cached',          
-        'extract_flat': False,
-        'impersonate': ImpersonateTarget.from_str('chrome'),
-        'socket_timeout': 5,                
-        'extractor_args': {'dailymotion': {'pubkey': ['']}},
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(target_url, download=False)
-            if not info:
-                return "Extraction failed.", 500
-                
-            formats = info.get('formats', [])
-            hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
-            m3u8_url = hls_streams[-1].get('url') if hls_streams else info.get('url')
-
-            if not m3u8_url and formats:
-                m3u8_url = formats[-1].get('url')
-
-            if not m3u8_url:
-                return "No playable stream paths found.", 404
-
-            video_thumbnail = info.get('thumbnail') or (info.get('thumbnails') and info.get('thumbnails')[-1].get('url')) or ""
-            creator_name = info.get('uploader') or info.get('channel') or "Verified Creator"
-            creator_avatar = info.get('uploader_url') or "" 
-            
-            return render_template_string(
-                PLAYER_TEMPLATE, 
-                title=info.get('title', 'Native Stream Source'),
-                current_video_id=clean_video_id,
-                target_url=target_url, 
-                stream_url=m3u8_url,   
-                priority=priority_flag,
-                author_name=creator_name,
-                author_avatar_url=creator_avatar,
-                forced_poster=video_thumbnail 
-            )
-            
-    except Exception as error:
-        threading.Thread(target=run_pip_update).start()
-        return f"Extraction Pipeline Exception Error: {str(error)}", 500
-
-@app.route('/manifest')
-def proxy_m3u8():
-    raw_m3u8_url = request.args.get('url')
-    priority = request.args.get('priority', 'standard')
-    if not raw_m3u8_url:
-        return "Missing proxy targets", 400
-
-    raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': '*/*',
-    }
-    
-    try:
-        resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=4)
-    except Exception:
-        return "Timeout during proxy resolution", 504
-
-    base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
-    rewritten_lines = []
-
-    for line in resp.text.splitlines():
-        line_stripped = line.strip()
-        if not line_stripped:
-            continue
-
-        if 'URI=' in line_stripped:
-            def replace_uri(match):
-                rel_path = match.group(1).strip('"\'')
-                abs_url = urllib.parse.urljoin(base_url, rel_path)
-                proxy_route = "/manifest" if (".m3u8" in rel_path or "manifest" in rel_path) else "/segment"
-                return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}&priority={priority}"'
-            line_stripped = re.sub(r'URI=(["\'].*?["\'])', replace_uri, line_stripped)
-            rewritten_lines.append(line_stripped)
-
-        elif not line_stripped.startswith('#'):
-            full_url = line_stripped if line_stripped.startswith(('http://', 'https://')) else urllib.parse.urljoin(base_url, line_stripped)
-            encoded_url = urllib.parse.quote_plus(full_url)
-            if '.m3u8' in line_stripped or 'manifest' in line_stripped:
-                rewritten_lines.append(f"/manifest?url={encoded_url}&priority={priority}")
-            else:
-                rewritten_lines.append(f"/segment?url={encoded_url}&priority={priority}")
-        else:
-            rewritten_lines.append(line_stripped)
-
-    response = Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
-    response.headers["Cache-Control"] = "public, max-age=3"
-    return response
-
-@app.route('/segment')
-def proxy_ts_segment():
-    raw_ts_url = request.args.get('url')
-    priority = request.args.get('priority', 'standard')
-    if not raw_ts_url:
-        return "Missing segment sequence indices", 400
-
-    raw_ts_url = urllib.parse.unquote(raw_ts_url)
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': '*/*',
-    }
-    timeout_val = 4 if priority == "high" else 5
-    
-    try:
-        req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
-        content_type = req.headers.get('Content-Type', 'video/MP2T')
-        
-        def stream_ts_data():
-            for block in req.iter_content(chunk_size=1024 * 256):
-                yield block
-
-        response = Response(stream_ts_data(), content_type=content_type)
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-        return response
-    except Exception:
-        return "Segment connection dropped", 502
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, threaded=True)
 
 @app.route('/')
 def index():
