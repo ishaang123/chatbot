@@ -96,17 +96,24 @@ PLAYER_TEMPLATE = """
             user-select: none;
         }
 
+        /* --- STAGE: FULL SCREEN VIEWPORT MANAGEMENT --- */
         .viewport-player-hero {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            margin: 0 auto;
+            position: fixed; /* Lock container tight over layout matrix */
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             background-color: #000;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
+        /* Force Video.js to fill out the entirety of the fixed viewport window */
         .video-js {
             width: 100% !important;
-            height: auto !important;
+            height: 100% !important;
             background-color: #000 !important;
         }
 
@@ -117,7 +124,12 @@ PLAYER_TEMPLATE = """
             background-color: #000 !important;
         }
 
-        .video-js video { object-fit: contain !important; }
+        /* Ensure aspect ratio handles 16:9 or 9:16 cleanly inside frame */
+        .video-js video { 
+            object-fit: contain !important;
+            width: 100% !important;
+            height: 100% !important;
+        }
 
         /* --- FLOATING HEADER --- */
         .embed-floating-header {
@@ -164,101 +176,111 @@ PLAYER_TEMPLATE = """
             filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); pointer-events: auto;
         }
 
-        /* --- YT-STYLE OVER EVERYTHING END SCREEN --- */
+        /* --- CUSTOM OVER-EVERYTHING END SCREEN OVERLAY --- */
         .player-endscreen-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 12; /* Sits completely over Video.js interfaces */
+            background: rgba(0, 0, 0, 0.92);
+            z-index: 12; /* Places it securely on top of Video.js elements */
             display: none; 
             flex-direction: column;
             justify-content: center;
             align-items: center;
             box-sizing: border-box;
-            padding: 20px;
+            padding: 32px 24px;
         }
 
         .endscreen-title {
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             font-weight: 700;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
             align-self: flex-start;
-            max-width: 100%;
-            padding-left: 4%;
+            width: 100%;
+            max-width: 720px;
+            margin-left: auto;
+            margin-right: auto;
+            letter-spacing: 0.5px;
         }
 
         .endscreen-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
+            gap: 20px;
             width: 100%;
             max-width: 720px;
-            max-height: 80%;
             overflow-y: auto;
+            padding-right: 4px;
         }
 
-        /* Handles tight mobile layouts safely */
-        @media (max-width: 480px) {
-            .endscreen-grid { grid-template-columns: 1fr; gap: 10px; }
-            .endscreen-title { font-size: 1rem; margin-bottom: 10px; }
+        @media (max-width: 560px) {
+            .endscreen-grid { grid-template-columns: 1fr; gap: 14px; }
+            .endscreen-title { font-size: 1.1rem; margin-bottom: 14px; }
         }
 
         .endscreen-card {
             display: flex;
-            gap: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 8px;
-            border-radius: 8px;
+            gap: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 10px;
+            border-radius: 12px;
             text-decoration: none;
             color: inherit;
             align-items: center;
-            transition: background 0.2s ease;
+            border: 1px solid rgba(255,255,255,0.02);
+            transition: background 0.2s ease, transform 0.2s ease;
         }
-        .endscreen-card:hover { background: rgba(255, 255, 255, 0.15); }
+        .endscreen-card:hover { 
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+        }
 
         .endscreen-thumb-container {
             position: relative;
-            width: 120px;
-            height: 68px;
+            width: 130px;
+            height: 74px;
             flex-shrink: 0;
-            border-radius: 4px;
+            border-radius: 6px;
             overflow: hidden;
             background: #111;
         }
         .endscreen-thumb-container img { width: 100%; height: 100%; object-fit: cover; }
 
         .endscreen-duration {
-            position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.8);
-            color: #fff; padding: 1px 3px; border-radius: 2px; font-size: 0.65rem; font-weight: 600;
+            position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,0.85);
+            color: #fff; padding: 2px 4px; border-radius: 3px; font-size: 0.68rem; font-weight: 600;
         }
 
         .endscreen-meta { display: flex; flex-direction: column; min-width: 0; }
         .endscreen-v-title {
-            font-size: 0.85rem; font-weight: 500; line-height: 1.3; color: var(--text-primary);
+            font-size: 0.88rem; font-weight: 500; line-height: 1.35; color: var(--text-primary);
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 4px;
         }
-        .endscreen-v-creator { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .endscreen-v-creator { font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* --- VIDEO.JS INJECTIONS --- */
+        /* --- VIDEO.JS INTERFACE MODIFICATIONS --- */
         .video-js .vjs-big-play-button {
             background-color: rgba(20, 20, 20, 0.85) !important; border: none !important; border-radius: 12px !important;
             width: 68px !important; height: 48px !important; line-height: 48px !important; margin-top: -24px !important; margin-left: -34px !important; z-index: 11;
         }
         .video-js:hover .vjs-big-play-button { background-color: var(--accent-primary) !important; }
-        .video-js .vjs-control-bar { display: flex !important; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%) !important; height: 48px !important; }
+        .video-js .vjs-control-bar { display: flex !important; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%) !important; height: 48px !important; z-index: 11; }
         .video-js .vjs-progress-control { position: absolute !important; width: calc(100% - 24px) !important; height: 6px !important; top: -6px !important; left: 12px !important; display: flex !important; visibility: visible !important;}
         .video-js .vjs-play-progress { background: var(--accent-primary) !important; }
         .video-js .vjs-slider { background-color: rgba(255,255,255,0.2) !important; }
+        
+        /* Hide native browser fullscreen controls so users rely exclusively on our custom implementation */
+        .video-js .vjs-fullscreen-control { display: none !important; }
+        
         .vjs-download-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
         .vjs-download-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; }
     </style>
 </head>
 <body>
 
-    <div class="viewport-player-hero">
+    <div class="viewport-player-hero" id="player-view-wrapper">
         
         <div class="embed-floating-header" id="embed-header">
             <div class="embed-header-left">
@@ -310,7 +332,6 @@ PLAYER_TEMPLATE = """
             }
         }
 
-        // Hit Dailymotion's operational graph strictly AFTER the stream completes playback. No pre-fetching allowed.
         async function runLazyEndscreenGeneration() {
             if(!targetVideoId) return;
             try {
@@ -340,11 +361,10 @@ PLAYER_TEMPLATE = """
                         gridContainer.appendChild(element);
                     });
                     
-                    // Reveal the layout directly on top of video canvas box
                     document.getElementById('endscreen-display').style.display = 'flex';
                 }
             } catch(e) {
-                console.error("Delayed payload pipeline fault:", e);
+                console.error("Delayed endscreen exception:", e);
             }
         }
 
@@ -355,8 +375,8 @@ PLAYER_TEMPLATE = """
                 preload: 'auto',
                 autoplay: false, 
                 controls: true,
-                fluid: true, 
-                playsinline: true,
+                fluid: false, // Turned off fluid configuration to let CSS rule over layout sizes
+                playsinline: true, 
                 webkitPlaysinline: true,
                 controlBar: {
                     progressControl: { enableTouchPoints: true }
@@ -369,12 +389,10 @@ PLAYER_TEMPLATE = """
                 exact_seeking: true 
             });
 
-            // Listen directly for playback end state
             player.on('ended', function() {
                 runLazyEndscreenGeneration();
             });
 
-            // Hide overlay if user seeks back or restarts video
             player.on('play', function() {
                 document.getElementById('endscreen-display').style.display = 'none';
             });
