@@ -103,28 +103,21 @@ INDEX_TEMPLATE = """
 </html>
 """
 PLAYER_TEMPLATE = """
+PLAYER_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }} - NebulaView Premium</title>
+    <title>{{ title }}</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
-        /* --- CORE DESIGN SYSTEM --- */
+        /* --- YT-EMBED DESIGN SYSTEM --- */
         :root {
-            --bg-base: #040406;
-            --bg-surface: #0b0b0f;
-            --bg-surface-elevated: #12121a;
-            --accent-primary: #a855f7;
-            --accent-secondary: #6366f1;
-            --text-primary: #f4f4f5;
-            --text-secondary: #a1a1aa;
-            --text-muted: #71717a;
-            --border-glow: rgba(168, 85, 247, 0.15);
-            --border-subtle: rgba(255, 255, 255, 0.06);
-            --sidebar-width: 400px;
-            --header-height: 56px;
+            --accent-primary: #ff0000; /* YouTube Red Accent Line */
+            --text-primary: #f1f1f1;
+            --text-secondary: #c0c0c0;
+            --gradient-top: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
         }
 
         html, body {
@@ -132,621 +125,227 @@ PLAYER_TEMPLATE = """
             padding: 0;
             width: 100%;
             height: 100%;
-            background-color: var(--bg-base);
-            color: var(--text-primary);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            overflow-x: hidden;
+            background-color: #000;
+            overflow: hidden;
+            font-family: "YouTube Noto", Roboto, Arial, sans-serif;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
-        /* Custom Scrollbar Styles */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg-base); }
-        ::-webkit-scrollbar-thumb { background: var(--bg-surface-elevated); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-
-        /* --- APPLICATION LAYOUT --- */
-        .app-container {
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            width: 100%;
-        }
-
-        /* Global Dynamic Header Navigation */
-        .app-header {
-            height: var(--header-height);
-            background: rgba(11, 11, 15, 0.8);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border-subtle);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 24px;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-        }
-
-        .header-left, .header-right { display: flex; align-items: center; gap: 16px; }
-        
-        .brand-logo {
-            font-size: 1.25rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-decoration: none;
-            letter-spacing: -0.5px;
-        }
-
-        .search-bar-container {
-            flex: 0 1 600px;
-            display: flex;
-            background: var(--bg-surface-elevated);
-            border: 1px solid var(--border-subtle);
-            border-radius: 40px;
-            padding: 4px 4px 4px 16px;
-            transition: border-color 0.2s;
-        }
-        .search-bar-container:focus-within {
-            border-color: var(--accent-primary);
-            box-shadow: 0 0 10px var(--border-glow);
-        }
-        .search-input {
-            background: transparent;
-            border: none;
-            outline: none;
-            color: var(--text-primary);
-            width: 100%;
-            font-size: 0.95rem;
-        }
-        .search-btn {
-            background: rgba(255, 255, 255, 0.03);
-            border: none;
-            border-left: 1px solid var(--border-subtle);
-            padding: 6px 20px;
-            border-radius: 0 40px 40px 0;
-            cursor: pointer;
-            color: var(--text-secondary);
-        }
-        .search-btn:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.06); }
-
-        .user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #3b82f6, #ec4899);
-            cursor: pointer;
-        }
-
-        /* --- THE STAGE (MAIN CONTENT GRID) --- */
-        .stage-layout {
-            display: grid;
-            grid-template-columns: 1fr;
-            max-width: 1750px;
-            width: 100%;
-            margin: 0 auto;
-            padding: 24px;
-            box-sizing: border-box;
-            gap: 24px;
-        }
-
-        @media (min-width: 1200px) {
-            .stage-layout {
-                grid-template-columns: 1fr var(--sidebar-width);
-            }
-        }
-
-        /* Primary Stream Column */
-        .stream-column {
-            display: flex;
-            flex-direction: column;
-            min-width: 0; /* Prevents flex items from breaking layout boundaries */
-        }
-
-        .video-player-canvas {
+        .embed-player-canvas {
             position: relative;
             width: 100%;
-            aspect-ratio: 16 / 9;
-            background-color: #000;
-            border-radius: 16px;
+            height: 100%;
             overflow: hidden;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
-            border: 1px solid var(--border-subtle);
         }
 
         .video-js {
             width: 100% !important;
             height: 100% !important;
+            background-color: #000 !important;
         }
 
-        /* Async Processing Matrix Loader Layer */
+        /* --- FLOATING HEADER WITH TITLE & CHANNEL DATA --- */
+        .embed-floating-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px 24px 40px 24px;
+            background: var(--gradient-top);
+            z-index: 10;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            box-sizing: border-box;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        /* Fades header out alongside control bar interaction lifecycle */
+        .vjs-has-started.vjs-user-inactive .embed-floating-header {
+            opacity: 0;
+        }
+
+        .embed-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            pointer-events: auto;
+            min-width: 0;
+        }
+
+        .embed-channel-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #a855f7, #6366f1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #fff;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+
+        .embed-meta-text {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .embed-video-title {
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin: 0;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+            text-decoration: none;
+        }
+        .embed-video-title:hover { text-decoration: underline; }
+
+        .embed-channel-name {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin: 2px 0 0 0;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+        }
+
+        .embed-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            pointer-events: auto;
+            flex-shrink: 0;
+        }
+        
+        .embed-icon-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            padding: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9));
+            transition: transform 0.1s;
+        }
+        .embed-icon-btn:hover { transform: scale(1.1); }
+
+        /* --- LOADING LAYER --- */
         #video-loader {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: var(--bg-base);
+            background: #000;
             z-index: 999;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
-            transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            transition: opacity 0.3s ease;
         }
         .spinner {
             box-sizing: border-box;
-            width: 56px;
-            height: 56px;
-            border: 4px solid rgba(168, 85, 247, 0.08);
-            border-top: 4px solid var(--accent-primary);
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.15);
+            border-top: 5px solid var(--accent-primary);
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+            animation: spin 0.7s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .loader-text {
-            margin-top: 20px;
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
 
-        /* --- VIDEO INTERACTIVE INFRASTRUCTURE --- */
-        .video-meta-card {
-            margin-top: 16px;
-            padding: 4px 0;
-        }
-
-        .video-title {
-            font-size: 1.35rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            line-height: 1.4;
-            margin: 0 0 12px 0;
-            word-wrap: break-word;
-        }
-
-        .interact-row {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid var(--border-subtle);
-        }
-
-        .channel-profile-block {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .channel-logo {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: var(--bg-surface-elevated);
-            border: 1px solid var(--border-subtle);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            color: var(--accent-primary);
-        }
-        .channel-name-meta { display: flex; flex-direction: column; }
-        .channel-title { font-weight: 600; font-size: 1rem; color: var(--text-primary); }
-        .channel-subs { font-size: 0.8rem; color: var(--text-secondary); }
-
-        .action-button-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .action-btn {
-            background: var(--bg-surface-elevated);
-            border: 1px solid var(--border-subtle);
-            color: var(--text-primary);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.88rem;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: background 0.2s, transform 0.1s;
-        }
-        .action-btn:hover { background: rgba(255, 255, 255, 0.08); }
-        .action-btn:active { transform: scale(0.98); }
-        .action-btn.accented {
-            background: var(--text-primary);
-            color: var(--bg-base);
-            border: none;
-        }
-        .action-btn.accented:hover { background: #e4e4e7; }
-
-        /* Dynamic Description Panel Section */
-        .description-expansion-panel {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-subtle);
-            border-radius: 12px;
-            padding: 16px;
-            margin-top: 16px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .description-expansion-panel:hover { background-color: var(--bg-surface-elevated); }
-        .desc-metrics { font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: flex; gap: 12px; }
-        .desc-text-body { font-size: 0.92rem; line-height: 1.5; color: #e4e4e7; margin: 0; white-space: pre-wrap; }
-
-        /* --- ENGAGEMENT AND COMMENTS SYSTEMS --- */
-        .comments-module { margin-top: 24px; }
-        .comments-header-row { font-size: 1.25rem; font-weight: 700; margin-bottom: 20px; display: flex; gap: 32px; }
-        
-        .comment-input-block { display: flex; gap: 16px; margin-bottom: 32px; }
-        .comment-composer-wrapper { flex: 1; }
-        .comment-box {
-            width: 100%;
-            background: transparent;
-            border: none;
-            border-bottom: 1px solid var(--text-muted);
-            color: var(--text-primary);
-            padding: 4px 0;
-            font-size: 0.92rem;
-            resize: none;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        .comment-box:focus { border-color: var(--text-primary); }
-        .comment-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; display: none; }
-
-        .comment-thread-list { display: flex; flex-direction: column; gap: 24px; }
-        .comment-node { display: flex; gap: 16px; }
-        .comment-node-content { display: flex; flex-direction: column; gap: 4px; }
-        .commenter-meta { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); display: flex; gap: 8px; }
-        .comment-timestamp { color: var(--text-secondary); font-weight: 400; }
-        .comment-text { font-size: 0.92rem; line-height: 1.4; color: #f4f4f5; margin: 0; }
-        .comment-interact { display: flex; gap: 12px; margin-top: 4px; color: var(--text-secondary); font-size: 0.78rem; align-items: center; }
-
-        /* --- COMPANION COLUMN (SIDEBAR ENGINE) --- */
-        .sidebar-column {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .feed-filter-shelf {
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            white-scroll-behavior: contain;
-            padding-bottom: 4px;
-        }
-        .feed-filter-shelf::-webkit-scrollbar { display: none; }
-        .chip {
-            background: var(--bg-surface-elevated);
-            border: 1px solid var(--border-subtle);
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            white-space: nowrap;
-            cursor: pointer;
-        }
-        .chip.active { background: var(--text-primary); color: var(--bg-base); border: none; }
-
-        .recommendation-pipeline { display: flex; flex-direction: column; gap: 12px; }
-        
-        /* Premium Compact Media Card Objects */
-        .media-card-horizontal {
-            display: flex;
-            gap: 12px;
-            text-decoration: none;
-            color: inherit;
-            cursor: pointer;
-            border-radius: 8px;
-            padding: 4px;
-            transition: background 0.2s;
-        }
-        .media-card-horizontal:hover { background: rgba(255,255,255,0.03); }
-        
-        .thumb-wrapper {
-            position: relative;
-            width: 168px;
-            height: 94px;
-            border-radius: 8px;
-            overflow: hidden;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-subtle);
-            flex-shrink: 0;
-        }
-        .thumb-image { width: 100%; height: 100%; object-fit: cover; opacity: 0.85; }
-        .card-duration {
-            position: absolute;
-            bottom: 4px;
-            right: 4px;
-            background: rgba(0,0,0,0.8);
-            padding: 2px 4px;
-            border-radius: 4px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            font-family: monospace;
-        }
-
-        .card-metadata-payload {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-        .card-title-string {
-            font-size: 0.88rem;
-            font-weight: 600;
-            line-height: 1.3;
-            color: var(--text-primary);
-            margin: 0 0 4px 0;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        .card-author-string, .card-metrics-string {
-            font-size: 0.78rem;
-            color: var(--text-secondary);
-            margin: 0;
-            line-height: 1.4;
-            text-overflow: ellipsis;
-            overflow: hidden;
-            white-space: nowrap;
-        }
-
-        /* --- PLAYER CONTROL BAR SPECIFIC CUSTOM OVERRIDES --- */
-        :root {
-            --bar-bg: rgba(11, 11, 15, 0.85);
-        }
+        /* --- VIDEO.JS INTERFACE MODIFICATIONS --- */
         .video-js .vjs-big-play-button {
-            background: linear-gradient(135deg, rgba(168, 85, 247, 0.95), rgba(99, 102, 241, 0.95)) !important;
+            background-color: rgba(33, 33, 33, 0.85) !important;
             border: none !important;
-            border-radius: 50% !important;
-            width: 72px !important;
-            height: 72px !important;
-            line-height: 72px !important;
-            margin-top: -36px !important;
-            margin-left: -36px !important;
-            box-shadow: 0 15px 35px rgba(168, 85, 247, 0.5);
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+            border-radius: 12px !important;
+            width: 68px !important;
+            height: 48px !important;
+            line-height: 48px !important;
+            margin-top: -24px !important;
+            margin-left: -34px !important;
+            transition: background-color 0.1s ease !important;
+            z-index: 20;
         }
-        .video-js:hover .vjs-big-play-button { transform: scale(1.1); }
+        .video-js:hover .vjs-big-play-button { 
+            background-color: var(--accent-primary) !important; 
+        }
         
         .video-js .vjs-control-bar {
-            background: var(--bar-bg) !important;
-            backdrop-filter: blur(20px) !important;
-            border: 1px solid var(--border-subtle);
-            border-radius: 12px !important;
-            width: calc(100% - 24px) !important;
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.3) 60%, rgba(0,0,0,0) 100%) !important;
             height: 48px !important;
-            bottom: 12px !important;
-            left: 12px !important;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 100% !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            border: none !important;
         }
         
         .video-js .vjs-progress-control {
             position: absolute !important;
             width: calc(100% - 24px) !important;
-            height: 6px !important;
-            top: -5px !important;
+            height: 3px !important;
+            top: -3px !important;
             left: 12px !important;
-            transition: height 0.15s;
+            transition: height 0.1s, top 0.1s;
         }
-        .video-js .vjs-progress-control:hover { height: 10px !important; top: -9px !important; }
-        .video-js .vjs-play-progress { background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary)) !important; }
-        .video-js .vjs-play-progress:before { display: none !important; }
+        .video-js .vjs-progress-control:hover { height: 5px !important; top: -5px !important; }
+        .video-js .vjs-play-progress { background: var(--accent-primary) !important; }
+        .video-js .vjs-play-progress:before { display: block !important; font-size: 11px !important; top: -3px !important; color: var(--accent-primary) !important; }
+        .video-js .vjs-slider { background-color: rgba(255,255,255,0.2) !important; }
+        .video-js .vjs-load-progress { background-color: rgba(255,255,255,0.35) !important; }
         .video-js .vjs-time-control { line-height: 48px !important; }
         
-        /* Download/Source Controller Injection Styling */
-        .vjs-download-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 42px; height: 100%; order: 99; }
-        .vjs-download-control svg { width: 20px; height: 20px; fill: var(--text-secondary); transition: fill 0.2s, transform 0.2s; }
-        .vjs-download-control:hover svg { fill: var(--text-primary); transform: translateY(1px); }
+        .vjs-download-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
+        .vjs-download-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; transition: opacity 0.2s; }
+        .vjs-download-control:hover svg { opacity: 1; }
     </style>
 </head>
 <body>
 
-    <div class="app-container">
-        <header class="app-header">
-            <div class="header-left">
-                <a href="/" class="brand-logo">NebulaView Premium</a>
+    <div class="embed-player-canvas">
+        
+        <div class="embed-floating-header" id="embed-header">
+            <div class="embed-header-left">
+                <div class="embed-channel-icon">NV</div>
+                <div class="embed-meta-text">
+                    <a class="embed-video-title" id="title-link" target="_blank">{{ title }}</a>
+                    <span class="embed-channel-name">NebulaView Pipeline</span>
+                </div>
             </div>
-            
-            <div class="search-bar-container">
-                <input type="text" class="search-input" placeholder="Search downstream indices..." value="{{ title }}">
-                <button class="search-btn">
-                    <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <div class="embed-header-actions">
+                <button class="embed-icon-btn" id="embed-share-btn" title="Share Video">
+                    <svg style="width:22px;height:22px;fill:currentColor" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.8 2.04.8 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
                 </button>
             </div>
-            
-            <div class="header-right">
-                <button class="action-btn" style="padding: 6px 12px;">
-                    <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                </button>
-                <div class="user-avatar"></div>
-            </div>
-        </header>
+        </div>
 
-        <main class="stage-layout">
-            
-            <section class="stream-column">
-                <div class="video-player-canvas">
-                    <div id="video-loader">
-                        <div class="spinner"></div>
-                        <div class="loader-text">Configuring Matrix Stream</div>
-                    </div>
-                    
-                    <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline>
-                        <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
-                    </video>
-                </div>
-
-                <div class="video-meta-card">
-                    <h1 class="video-title">{{ title }}</h1>
-                    
-                    <div class="interact-row">
-                        <div class="channel-profile-block">
-                            <div class="channel-logo">NV</div>
-                            <div class="channel-name-meta">
-                                <span class="channel-title">Native Pipeline Core</span>
-                                <span class="channel-subs">Automated Cluster Cluster</span>
-                            </div>
-                            <button class="action-btn accented" style="margin-left: 12px;">Subscribe</button>
-                        </div>
-                        
-                        <div class="action-button-group">
-                            <button class="action-btn">
-                                <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.58 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.75 0 1.41-.41 1.75-1.03l3.58-8.35c.09-.23.14-.48.14-.73v-2z"/></svg>
-                                <span>3.4K</span>
-                            </button>
-                            <button class="action-btn">
-                                <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
-                                <span>Save</span>
-                            </button>
-                            <button class="action-btn" id="custom-share-trigger">
-                                <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.8 2.04.8 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
-                                <span>Share</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="description-expansion-panel" id="desc-panel">
-                    <div class="desc-metrics">
-                        <span>124,512 views</span>
-                        <span>Jun 9, 2026</span>
-                        <span style="color:var(--accent-primary)">#NativeStreaming</span>
-                    </div>
-                    <p class="desc-text-body" id="desc-text">This dynamic pipeline entry establishes an immutable high-performance proxy bridge directly to edge manifest vectors. Real-time HLS fragment reconstruction guarantees adaptive bitrates without persistent buffering sequences. 
-
-Click to read full documentation index regarding architecture topologies, dynamic CORS validation hooks, and custom Video.js runtime event loops.</p>
-                </div>
-
-                <div class="comments-module">
-                    <div class="comments-header-row">
-                        <span>42 Comments</span>
-                        <span style="font-size:0.9rem;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:4px">
-                            <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg> Sort by
-                        </span>
-                    </div>
-
-                    <div class="comment-input-block">
-                        <div class="channel-logo" style="width:36px;height:36px;font-size:0.85rem">U</div>
-                        <div class="comment-composer-wrapper">
-                            <textarea class="comment-box" id="comment-box-field" rows="1" placeholder="Add a public comment..."></textarea>
-                            <div class="comment-actions" id="comment-actions-row">
-                                <button class="action-btn" id="comment-cancel-btn" style="background:transparent;border:none">Cancel</button>
-                                <button class="action-btn accented" id="comment-submit-btn" style="padding:6px 12px;font-size:0.8rem">Comment</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="comment-thread-list">
-                        <div class="comment-node">
-                            <div class="channel-logo" style="width:36px;height:36px;font-size:0.85rem;color:#3b82f6">DX</div>
-                            <div class="comment-node-content">
-                                <div class="commenter-meta">@dev_matrix_x <span class="comment-timestamp">2 hours ago</span></div>
-                                <p class="comment-text">The segment routing throughput optimization on this endpoint is completely flawless. Dropping the cache boundaries down to 3 seconds practically neutralized live stream skipping errors entirely.</p>
-                                <div class="comment-interact">
-                                    <svg style="width:14px;height:14px;fill:currentColor;cursor:pointer" viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.58 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.75 0 1.41-.41 1.75-1.03l3.58-8.35c.09-.23.14-.48.14-.73v-2z"/></svg> <span>142</span>
-                                    <svg style="width:14px;height:14px;fill:currentColor;cursor:pointer" viewBox="0 0 24 24"><path d="M15 3H6c-.75 0-1.41.41-1.75 1.03l-3.58 8.35c-.09.23-.14.48-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
-                                    <span style="font-weight:700;cursor:pointer;margin-left:8px">Reply</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="comment-node">
-                            <div class="channel-logo" style="width:36px;height:36px;font-size:0.85rem;color:#10b981">H</div>
-                            <div class="comment-node-content">
-                                <div class="commenter-meta">@hls_packet_master <span class="comment-timestamp">5 hours ago</span></div>
-                                <p class="comment-text">Is there any plan to support alternative audio descriptive multi-tracks natively through the manifest proxy compiler pipeline later on?</p>
-                                <div class="comment-interact">
-                                    <svg style="width:14px;height:14px;fill:currentColor;cursor:pointer" viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.58 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.75 0 1.41-.41 1.75-1.03l3.58-8.35c.09-.23.14-.48.14-.73v-2z"/></svg> <span>19</span>
-                                    <svg style="width:14px;height:14px;fill:currentColor;cursor:pointer" viewBox="0 0 24 24"><path d="M15 3H6c-.75 0-1.41.41-1.75 1.03l-3.58 8.35c-.09.23-.14.48-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
-                                    <span style="font-weight:700;cursor:pointer;margin-left:8px">Reply</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <aside class="sidebar-column">
-                <div class="feed-filter-shelf">
-                    <div class="chip active">All</div>
-                    <div class="chip">From this pipe</div>
-                    <div class="chip">Related indices</div>
-                    <div class="chip">Live Streams</div>
-                </div>
-
-                <div class="recommendation-pipeline">
-                    <div class="media-card-horizontal" onclick="injectAlternativeIndex('x7tgv4a')">
-                        <div class="thumb-wrapper">
-                            <div class="thumb-image" style="background:linear-gradient(45deg, #1e1b4b, #311042)"></div>
-                            <span class="card-duration">14:22</span>
-                        </div>
-                        <div class="card-metadata-payload">
-                            <h4 class="card-title-string">High Throughput HLS Optimization Layout Patterns</h4>
-                            <p class="card-author-string">Nebula Architecture</p>
-                            <p class="card-metrics-string">45K views &bull; 3 days ago</p>
-                        </div>
-                    </div>
-
-                    <div class="media-card-horizontal" onclick="injectAlternativeIndex('x80kh31')">
-                        <div class="thumb-wrapper">
-                            <div class="thumb-image" style="background:linear-gradient(45deg, #022c22, #111827)"></div>
-                            <span class="card-duration">08:05</span>
-                        </div>
-                        <div class="card-metadata-payload">
-                            <h4 class="card-title-string">Bypassing Multi-Origin Sandbox Blockades Safely</h4>
-                            <p class="card-author-string">CORS Security Node</p>
-                            <p class="card-metrics-string">120K views &bull; 1 week ago</p>
-                        </div>
-                    </div>
-
-                    <div class="media-card-horizontal" onclick="injectAlternativeIndex('x9zbkt6')">
-                        <div class="thumb-wrapper">
-                            <div class="thumb-image" style="background:linear-gradient(45deg, #3b0764, #030712)"></div>
-                            <span class="card-duration">22:40</span>
-                        </div>
-                        <div class="card-metadata-payload">
-                            <h4 class="card-title-string">Decoding Segment TS Packets with Custom Array Buffers</h4>
-                            <p class="card-author-string">Binary Stream Dev</p>
-                            <p class="card-metrics-string">8.9K views &bull; 24 hours ago</p>
-                        </div>
-                    </div>
-
-                    <div class="media-card-horizontal" onclick="injectAlternativeIndex('x7w239b')">
-                        <div class="thumb-wrapper">
-                            <div class="thumb-image" style="background:linear-gradient(45deg, #4c0519, #1c1917)"></div>
-                            <span class="card-duration">11:14</span>
-                        </div>
-                        <div class="card-metadata-payload">
-                            <h4 class="card-title-string">Dynamic Chunk Allocations and Edge Execution Overheads</h4>
-                            <p class="card-author-string">Infrastructure Team</p>
-                            <p class="card-metrics-string">92K views &bull; 5 days ago</p>
-                        </div>
-                    </div>
-                </div>
-            </aside>
-
-        </main>
+        <div id="video-loader">
+            <div class="spinner"></div>
+        </div>
+        
+        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline poster="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920&auto=format&fit=crop">
+            <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
+        </video>
+        
     </div>
 
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // Instantiate complex player settings engine
+            // Instantiate video framework engine without autoplay parameter overrides
             const player = videojs('my-video', {
-                preload: 'auto',
-                autoplay: true,
+                preload: 'metadata',
+                autoplay: false, 
                 controls: true,
                 fluid: false,
                 html5: {
@@ -754,75 +353,39 @@ Click to read full documentation index regarding architecture topologies, dynami
                         overrideNative: true,
                         maxBufferLength: 45,
                         enableLowInitialPlaylist: true,
-                        fastStart: true,
-                        allowCrossDomains: true
+                        fastStart: true
                     }
                 }
             });
 
-            // Append customizable button architecture once ready
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
-                downloadBtn.title = 'Access Native Manifest Path';
+                downloadBtn.title = 'Open Media Source';
                 downloadBtn.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>`;
                 
+                const currentSrc = player.src();
+                const urlParams = new URLSearchParams(currentSrc.split('?')[1]);
+                const targetM3u8Url = urlParams.get('url');
+                const decodedUrl = targetM3u8Url ? decodeURIComponent(targetM3u8Url) : currentSrc;
+                
+                document.getElementById('title-link').href = decodedUrl;
+
                 downloadBtn.addEventListener('click', function() {
-                    const currentSrc = player.src();
-                    const urlParams = new URLSearchParams(currentSrc.split('?')[1]);
-                    const targetM3u8Url = urlParams.get('url');
-                    window.open(targetM3u8Url ? decodeURIComponent(targetM3u8Url) : currentSrc, '_blank');
+                    window.open(decodedUrl, '_blank');
                 });
                 controlBar.el().appendChild(downloadBtn);
-            });
-
-            // Handle transition drop-off of video loading envelope masks
-            player.on('canplay', function() {
+                
+                // Remove initial load screen since user must explicitly press play
                 const loader = document.getElementById('video-loader');
                 if (loader) {
                     loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 400);
-                }
-                player.play().catch(() => {
-                    player.muted(true);
-                    player.play();
-                });
-            });
-
-            /* --- INTERACTIVE REACTION HANDLERS --- */
-            // Description Expand/Collapse Panel Engine
-            const descPanel = document.getElementById('desc-panel');
-            const descText = document.getElementById('desc-text');
-            let isExpanded = false;
-            
-            descPanel.addEventListener('click', function() {
-                if(!isExpanded) {
-                    descText.style.maxHeight = 'none';
-                    descPanel.style.backgroundColor = 'var(--bg-surface-elevated)';
-                    isExpanded = true;
-                } else {
-                    descPanel.style.backgroundColor = 'var(--bg-surface)';
-                    isExpanded = false;
+                    setTimeout(() => loader.remove(), 300);
                 }
             });
 
-            // Active Input Area Comment Field States
-            const commentBox = document.getElementById('comment-box-field');
-            const commentActions = document.getElementById('comment-actions-row');
-            const cancelComment = document.getElementById('comment-cancel-btn');
-
-            commentBox.addEventListener('focus', function() {
-                commentActions.style.display = 'flex';
-            });
-
-            cancelComment.addEventListener('click', function() {
-                commentBox.value = '';
-                commentActions.style.display = 'none';
-            });
-
-            // Native Share Endpoint Interface Simulator
-            document.getElementById('custom-share-trigger').addEventListener('click', function() {
+            document.getElementById('embed-share-btn').addEventListener('click', function() {
                 if (navigator.share) {
                     navigator.share({
                         title: document.title,
@@ -830,18 +393,14 @@ Click to read full documentation index regarding architecture topologies, dynami
                     }).catch(console.error);
                 } else {
                     navigator.clipboard.writeText(window.location.href);
-                    alert("App endpoint vector copied directly to user clipboard payload.");
+                    alert("Share link copied to clipboard.");
                 }
             });
         });
-
-        // Alternative Recommendation Ingestion Routing Helper
-        function injectAlternativeIndex(targetMediaIdentifier) {
-            window.location.href = '/download?id_or_url=' + encodeURIComponent(targetMediaIdentifier);
-        }
     </script>
 </body>
 </html>
+"""
 """
 
 # --- ROUTE HANDLERS ---
