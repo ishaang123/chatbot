@@ -10,42 +10,31 @@ from flask import Flask, request, Response, render_template_string
 import yt_dlp
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
-# Global lock to prevent multiple update processes from running at the exact same time
 update_lock = threading.Lock()
 
 def run_pip_update():
-    """Helper function to execute the pip upgrade safely within a lock."""
     if update_lock.locked():
-        print("[Engine Lifecycle] Update already in progress, skipping duplicate request.")
         return
-        
     with update_lock:
         try:
-            print("[Engine Lifecycle] Running extraction framework update check...")
             subprocess.run(
                 [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
-            print("[Engine Lifecycle] Engine package update routine completed successfully.")
-        except Exception as e:
-            print(f"[Engine Lifecycle] Upgrade execution deferred: {e}")
+        except Exception:
+            pass
 
-# --- CONTINUOUS BACKGROUND UPDATE LOOP ---
 def upgrade_extractor_engine_loop():
-    """Runs continuously. Checks and updates yt-dlp on startup, then every 2 hours."""
-    time.sleep(5)  # Short pause to let Flask bind its ports smoothly
+    time.sleep(5)
     while True:
         run_pip_update()
-        time.sleep(7200)  # Sleep for 2 hours (7200 seconds)
+        time.sleep(7200)
 
-# Start the continuous 2-hour background loop thread
 threading.Thread(target=upgrade_extractor_engine_loop, daemon=True).start()
-
 
 app = Flask(__name__)
 
-# Streamlined persistent network pool for proxy operations
 http_pool = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
 http_pool.mount('http://', adapter)
@@ -53,52 +42,27 @@ http_pool.mount('https://', adapter)
 
 INTERNAL_INFRASTRUCTURE_HOST = "cggames.pythonanywhere.com"
 
-# --- UI TEMPLATES ---
-
 INDEX_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NebulaView Core</title>
     <style>
         body {
             background: radial-gradient(circle at center, #0c0a0f 0%, #050506 100%);
             color: #f4f4f5;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             margin: 0;
         }
-        .container {
-            max-width: 420px;
-            text-align: center;
-            padding: 40px;
-            background: rgba(10, 10, 12, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 24px;
-            backdrop-filter: blur(40px);
-            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8);
-        }
-        h1 {
-            font-size: 2rem;
-            margin: 0 0 12px 0;
-            background: linear-gradient(135deg, #a855f7, #6366f1);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-weight: 800;
-        }
-        p { color: #71717a; line-height: 1.6; font-size: 0.95rem; margin: 0; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>NebulaView Mobile</h1>
-        <p>Pure Native Extraction Engine Active.</p>
-    </div>
+    <h1>NebulaView Mobile Active</h1>
 </body>
 </html>
 """
@@ -112,17 +76,14 @@ PLAYER_TEMPLATE = """
     <title>{{ title }}</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
-        /* --- CORE DESIGN MODULE --- */
         :root {
             --accent-primary: #ff0000;
             --bg-base: #0f0f0f;
             --text-primary: #f1f1f1;
             --text-secondary: #aaaaaa;
-            --border-subtle: rgba(255, 255, 255, 0.1);
             --gradient-top: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
         }
 
-        /* --- INTERACTION LOCKS --- */
         html, body {
             margin: 0;
             padding: 0;
@@ -130,48 +91,35 @@ PLAYER_TEMPLATE = """
             height: 100%;
             background-color: var(--bg-base);
             color: var(--text-primary);
-            font-family: "Roboto", "YouTube Noto", Arial, sans-serif;
-            overflow: hidden; /* Lock scroll container to prevent messy lower info views */
-            
-            -webkit-text-size-adjust: 100%;
-            -webkit-tap-highlight-color: rgba(0, 0, 0, 0) !important;
-            -webkit-touch-callout: none !important;
-            -webkit-user-select: none !important;
+            font-family: "Roboto", Arial, sans-serif;
+            overflow: hidden;
             user-select: none;
         }
 
-        /* --- STAGE A: VIEWPORT LAYER (FULLY DYNAMIC DIMENSIONS) --- */
         .viewport-player-hero {
             position: relative;
             width: 100%;
             max-width: 800px;
             margin: 0 auto;
             background-color: #000;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
         }
 
-        /* Force Video.js to respect fluid aspects without structural collapsing */
         .video-js {
             width: 100% !important;
             height: auto !important;
             background-color: #000 !important;
         }
 
-        /* Prevent portrait/9:16 thumbnails from clipping or layout bursting */
         .vjs-poster {
             background-size: contain !important;
             background-repeat: no-repeat !important;
             background-position: center !important;
             background-color: #000 !important;
-            display: block !important;
         }
 
-        /* Ensure actual video content scales safely inside the viewport engine */
-        .video-js video {
-            object-fit: contain !important;
-        }
+        .video-js video { object-fit: contain !important; }
 
-        /* --- YT-STYLE FLOATING OVERLAY --- */
+        /* --- FLOATING HEADER --- */
         .embed-floating-header {
             position: absolute;
             top: 0;
@@ -204,142 +152,106 @@ PLAYER_TEMPLATE = """
             background: #272727;
             font-weight: 700;
             color: #fff;
-            font-size: 1.1rem;
         }
-        .embed-channel-icon-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+        .embed-channel-icon-container img { width: 100%; height: 100%; object-fit: cover; }
 
         .embed-meta-text { display: flex; flex-direction: column; min-width: 0; }
-        .embed-video-title { color: var(--text-primary); font-size: 1.2rem; font-weight: 500; margin: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
-        .embed-channel-name { color: var(--text-secondary); font-size: 0.9rem; margin-top: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.9); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-        .embed-header-actions { display: flex; align-items: center; pointer-events: auto; flex-shrink: 0; }
+        .embed-video-title { color: var(--text-primary); font-size: 1.1rem; font-weight: 500; margin: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+        .embed-channel-name { color: var(--text-secondary); font-size: 0.85rem; margin-top: 2px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
         
         .embed-icon-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-primary);
-            cursor: pointer;
-            padding: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9));
+            background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 8px;
+            filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); pointer-events: auto;
         }
 
-        /* --- STAGE B: UP NEXT RECOMMENDATION SLIDER --- */
-        .up-next-section-frame {
-            max-width: 800px;
-            margin: 16px auto 0 auto;
-            padding: 0 16px;
-            box-sizing: border-box;
-        }
-
-        .up-next-header-title {
-            font-size: 1.05rem;
-            font-weight: 700;
-            margin: 0 0 12px 0;
-            color: var(--text-primary);
-            letter-spacing: 0.3px;
-        }
-
-        .up-next-scroll-container {
-            display: flex;
-            gap: 12px;
-            overflow-x: auto;
-            padding-bottom: 8px;
-            scrollbar-width: none; /* Firefox */
-        }
-        .up-next-scroll-container::-webkit-scrollbar { display: none; } /* Chrome/Safari */
-
-        .up-next-card {
-            display: flex;
-            flex-direction: column;
-            width: 160px;
-            flex-shrink: 0;
-            cursor: pointer;
-            text-decoration: none;
-            color: inherit;
-        }
-
-        .up-next-thumbnail-wrapper {
-            position: relative;
-            width: 160px;
-            height: 90px;
-            border-radius: 8px;
-            overflow: hidden;
-            background-color: #1a1a1a;
-        }
-        .up-next-thumbnail-wrapper img {
+        /* --- YT-STYLE OVER EVERYTHING END SCREEN --- */
+        .player-endscreen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 12; /* Sits completely over Video.js interfaces */
+            display: none; 
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+            padding: 20px;
         }
 
-        .up-next-duration-badge {
-            position: absolute;
-            bottom: 4px;
-            right: 4px;
-            background: rgba(0,0,0,0.8);
-            color: #fff;
-            padding: 2px 4px;
+        .endscreen-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            align-self: flex-start;
+            max-width: 100%;
+            padding-left: 4%;
+        }
+
+        .endscreen-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            width: 100%;
+            max-width: 720px;
+            max-height: 80%;
+            overflow-y: auto;
+        }
+
+        /* Handles tight mobile layouts safely */
+        @media (max-width: 480px) {
+            .endscreen-grid { grid-template-columns: 1fr; gap: 10px; }
+            .endscreen-title { font-size: 1rem; margin-bottom: 10px; }
+        }
+
+        .endscreen-card {
+            display: flex;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: inherit;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+        .endscreen-card:hover { background: rgba(255, 255, 255, 0.15); }
+
+        .endscreen-thumb-container {
+            position: relative;
+            width: 120px;
+            height: 68px;
+            flex-shrink: 0;
             border-radius: 4px;
-            font-size: 0.72rem;
-            font-weight: 600;
+            overflow: hidden;
+            background: #111;
+        }
+        .endscreen-thumb-container img { width: 100%; height: 100%; object-fit: cover; }
+
+        .endscreen-duration {
+            position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.8);
+            color: #fff; padding: 1px 3px; border-radius: 2px; font-size: 0.65rem; font-weight: 600;
         }
 
-        .up-next-card-title {
-            font-size: 0.82rem;
-            font-weight: 500;
-            line-height: 1.3;
-            margin: 6px 0 2px 0;
-            color: var(--text-primary);
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+        .endscreen-meta { display: flex; flex-direction: column; min-width: 0; }
+        .endscreen-v-title {
+            font-size: 0.85rem; font-weight: 500; line-height: 1.3; color: var(--text-primary);
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 4px;
         }
-        .up-next-card-creator {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
+        .endscreen-v-creator { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* --- VIDEO.JS MODIFICATION MATRIX --- */
+        /* --- VIDEO.JS INJECTIONS --- */
         .video-js .vjs-big-play-button {
-            background-color: rgba(20, 20, 20, 0.85) !important;
-            border: none !important;
-            border-radius: 12px !important;
-            width: 68px !important;
-            height: 48px !important;
-            line-height: 48px !important;
-            margin-top: -24px !important;
-            margin-left: -34px !important;
-            z-index: 11;
+            background-color: rgba(20, 20, 20, 0.85) !important; border: none !important; border-radius: 12px !important;
+            width: 68px !important; height: 48px !important; line-height: 48px !important; margin-top: -24px !important; margin-left: -34px !important; z-index: 11;
         }
         .video-js:hover .vjs-big-play-button { background-color: var(--accent-primary) !important; }
-        
-        .video-js .vjs-control-bar { 
-            display: flex !important;
-            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%) !important; 
-            height: 48px !important; 
-        }
-        .video-js .vjs-progress-control { 
-            position: absolute !important; 
-            width: calc(100% - 24px) !important; 
-            height: 6px !important; 
-            top: -6px !important; 
-            left: 12px !important; 
-            display: flex !important;
-            visibility: visible !important;
-        }
+        .video-js .vjs-control-bar { display: flex !important; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%) !important; height: 48px !important; }
+        .video-js .vjs-progress-control { position: absolute !important; width: calc(100% - 24px) !important; height: 6px !important; top: -6px !important; left: 12px !important; display: flex !important; visibility: visible !important;}
         .video-js .vjs-play-progress { background: var(--accent-primary) !important; }
         .video-js .vjs-slider { background-color: rgba(255,255,255,0.2) !important; }
-
         .vjs-download-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
         .vjs-download-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; }
     </style>
@@ -357,25 +269,24 @@ PLAYER_TEMPLATE = """
                 </div>
             </div>
             <div class="embed-header-actions">
-                <button class="embed-icon-btn" id="embed-share-btn" title="Share Link">
+                <button class="embed-icon-btn" id="embed-share-btn">
                     <svg style="width:22px;height:22px;fill:currentColor" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.8 2.04.8 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
                 </button>
             </div>
+        </div>
+
+        <div class="player-endscreen-overlay" id="endscreen-display">
+            <div class="endscreen-title">Up Next</div>
+            <div class="endscreen-grid" id="endscreen-grid-items">
+                </div>
         </div>
 
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline></video>
         
     </div>
 
-    <div class="up-next-section-frame">
-        <h2 class="up-next-header-title">Up Next</h2>
-        <div class="up-next-scroll-container" id="up-next-list">
-            </div>
-    </div>
-
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
-        // Setup configuration metrics
         const targetVideoId = "{{ current_video_id }}";
 
         function resolveMediaAssets() {
@@ -383,17 +294,14 @@ PLAYER_TEMPLATE = """
             if (!posterUrl || posterUrl === "None" || posterUrl === "") {
                 posterUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920";
             }
-            
-            const myVideo = document.getElementById('my-video');
-            myVideo.setAttribute('poster', posterUrl);
+            document.getElementById('my-video').setAttribute('poster', posterUrl);
 
-            // --- RESOLVE CREATOR PROFILE AVATAR ---
             const creatorName = "{{ author_name }}".trim() || "Verified Creator";
             const passedAvatar = "{{ author_avatar_url }}".trim();
             const hudIconContainer = document.getElementById('avatar-container-hud');
 
             if (passedAvatar && passedAvatar !== "None" && passedAvatar !== "") {
-                hudIconContainer.innerHTML = `<img src="${passedAvatar}" alt="Avatar">`;
+                hudIconContainer.innerHTML = `<img src="${passedAvatar}">`;
             } else {
                 const firstLetter = creatorName.charAt(0).toUpperCase();
                 const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3'];
@@ -402,44 +310,47 @@ PLAYER_TEMPLATE = """
             }
         }
 
-        // Fetch recommendations directly using Dailymotion's Endpoint Architecture
-        async function fetchUpNextFeed() {
+        // Hit Dailymotion's operational graph strictly AFTER the stream completes playback. No pre-fetching allowed.
+        async function runLazyEndscreenGeneration() {
             if(!targetVideoId) return;
             try {
-                const response = await fetch(`https://api.dailymotion.com/video/${targetVideoId}/related?fields=id,title,owner.username,thumbnail_240_url,duration&limit=6`);
+                const response = await fetch(`https://api.dailymotion.com/video/${targetVideoId}/related?fields=id,title,owner.username,thumbnail_240_url,duration&limit=4`);
                 const data = await response.json();
                 if(data && data.list) {
-                    const listContainer = document.getElementById('up-next-list');
-                    listContainer.innerHTML = '';
+                    const gridContainer = document.getElementById('endscreen-grid-items');
+                    gridContainer.innerHTML = '';
                     
                     data.list.forEach(item => {
                         const mins = Math.floor(item.duration / 60);
                         const secs = String(item.duration % 60).padStart(2, '0');
                         
-                        const card = document.createElement('a');
-                        card.className = 'up-next-card';
-                        card.href = `/download?id_or_url=${item.id}`;
-                        card.innerHTML = `
-                            <div class="up-next-thumbnail-wrapper">
-                                <img src="${item.thumbnail_240_url}" alt="thumb">
-                                <div class="up-next-duration-badge">${mins}:${secs}</div>
+                        const element = document.createElement('a');
+                        element.className = 'endscreen-card';
+                        element.href = `/download?id_or_url=${item.id}`;
+                        element.innerHTML = `
+                            <div class="endscreen-thumb-container">
+                                <img src="${item.thumbnail_240_url}">
+                                <div class="endscreen-duration">${mins}:${secs}</div>
                             </div>
-                            <div class="up-next-card-title">${item.title}</div>
-                            <div class="up-next-card-creator">${item['owner.username'] || 'Creator'}</div>
+                            <div class="endscreen-meta">
+                                <div class="endscreen-v-title">${item.title}</div>
+                                <div class="endscreen-v-creator">${item['owner.username'] || 'Creator'}</div>
+                            </div>
                         `;
-                        listContainer.appendChild(card);
+                        gridContainer.appendChild(element);
                     });
+                    
+                    // Reveal the layout directly on top of video canvas box
+                    document.getElementById('endscreen-display').style.display = 'flex';
                 }
             } catch(e) {
-                console.error("Dailymotion API tracking exception:", e);
+                console.error("Delayed payload pipeline fault:", e);
             }
         }
 
         document.addEventListener("DOMContentLoaded", function() {
             resolveMediaAssets();
-            fetchUpNextFeed();
 
-            // Configured Engine for exact seeking handling across 16:9 and 9:16 files
             const player = videojs('my-video', {
                 preload: 'auto',
                 autoplay: false, 
@@ -448,17 +359,24 @@ PLAYER_TEMPLATE = """
                 playsinline: true,
                 webkitPlaysinline: true,
                 controlBar: {
-                    progressControl: {
-                        enableTouchPoints: true // High accuracy mobile resolution scrubbing
-                    }
+                    progressControl: { enableTouchPoints: true }
                 }
             });
 
-            // Set source explicitly via JavaScript to maintain precise playback bounds
             player.src({
                 src: "/manifest?url={{ stream_url | urlencode }}&priority={{ priority }}",
                 type: 'application/x-mpegURL',
-                exact_seeking: true // Enforces native presentation-timestamp alignment
+                exact_seeking: true 
+            });
+
+            // Listen directly for playback end state
+            player.on('ended', function() {
+                runLazyEndscreenGeneration();
+            });
+
+            // Hide overlay if user seeks back or restarts video
+            player.on('play', function() {
+                document.getElementById('endscreen-display').style.display = 'none';
             });
 
             player.ready(function() {
@@ -490,12 +408,9 @@ PLAYER_TEMPLATE = """
 </html>
 """
 
-# --- ROUTE HANDLERS ---
-
 @app.route('/')
 def index():
     return render_template_string(INDEX_TEMPLATE)
-
 
 @app.route('/download', methods=['POST', 'GET'])
 def render_player():
@@ -507,7 +422,6 @@ def render_player():
     referer = request.headers.get("Referer", "")
     priority_flag = "high" if INTERNAL_INFRASTRUCTURE_HOST in referer else "standard"
 
-    # Extract clean video ID context for use within internal API queries
     video_id_match = re.search(r'(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)', user_input)
     clean_video_id = video_id_match.group(1) if video_id_match else user_input
 
@@ -525,19 +439,14 @@ def render_player():
         'extract_flat': False,
         'impersonate': ImpersonateTarget.from_str('chrome'),
         'socket_timeout': 5,                
-        'extractor_args': {
-            'dailymotion': {
-                'pubkey': [''],             
-            }
-        },
+        'extractor_args': {'dailymotion': {'pubkey': ['']}},
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_url, download=False)
-            
             if not info:
-                return "yt_dlp failed to extract a valid metadata envelope.", 500
+                return "Extraction failed.", 500
                 
             formats = info.get('formats', [])
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
@@ -547,9 +456,8 @@ def render_player():
                 m3u8_url = formats[-1].get('url')
 
             if not m3u8_url:
-                return "No playable stream paths found within the yt_dlp response object.", 404
+                return "No playable stream paths found.", 404
 
-            # --- DYNAMIC METADATA EXTRACTION PIPELINE ---
             video_thumbnail = info.get('thumbnail') or (info.get('thumbnails') and info.get('thumbnails')[-1].get('url')) or ""
             creator_name = info.get('uploader') or info.get('channel') or "Verified Creator"
             creator_avatar = info.get('uploader_url') or "" 
@@ -567,31 +475,26 @@ def render_player():
             )
             
     except Exception as error:
-        print(f"[Extraction Failure] Forcing emergency update check due to error: {error}")
         threading.Thread(target=run_pip_update).start()
-        
-        return f"Extraction Pipeline Exception Error: {str(error)}. A critical engine patch check has been initiated.", 500
-
+        return f"Extraction Pipeline Exception Error: {str(error)}", 500
 
 @app.route('/manifest')
 def proxy_m3u8():
     raw_m3u8_url = request.args.get('url')
     priority = request.args.get('priority', 'standard')
     if not raw_m3u8_url:
-        return "Missing proxy reference targets", 400
+        return "Missing proxy targets", 400
 
     raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
-    
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
     }
     
     try:
         resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=4)
     except Exception:
-        return "Edge latency timeout during proxy resolution", 504
+        return "Timeout during proxy resolution", 504
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
     rewritten_lines = []
@@ -613,7 +516,6 @@ def proxy_m3u8():
         elif not line_stripped.startswith('#'):
             full_url = line_stripped if line_stripped.startswith(('http://', 'https://')) else urllib.parse.urljoin(base_url, line_stripped)
             encoded_url = urllib.parse.quote_plus(full_url)
-            
             if '.m3u8' in line_stripped or 'manifest' in line_stripped:
                 rewritten_lines.append(f"/manifest?url={encoded_url}&priority={priority}")
             else:
@@ -625,7 +527,6 @@ def proxy_m3u8():
     response.headers["Cache-Control"] = "public, max-age=3"
     return response
 
-
 @app.route('/segment')
 def proxy_ts_segment():
     raw_ts_url = request.args.get('url')
@@ -634,11 +535,9 @@ def proxy_ts_segment():
         return "Missing segment sequence indices", 400
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
-    
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
     }
     timeout_val = 4 if priority == "high" else 5
     
@@ -655,7 +554,6 @@ def proxy_ts_segment():
         return response
     except Exception:
         return "Segment connection dropped", 502
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
