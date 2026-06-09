@@ -103,7 +103,6 @@ INDEX_TEMPLATE = """
 </html>
 """
 PLAYER_TEMPLATE = """
-PLAYER_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -401,7 +400,7 @@ PLAYER_TEMPLATE = """
 </body>
 </html>
 """
-"""
+
 
 # --- ROUTE HANDLERS ---
 
