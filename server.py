@@ -122,7 +122,7 @@ PLAYER_TEMPLATE = """
             --gradient-top: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
         }
 
-        /* --- AGGRESIVE APPLE INTERACTION LOCK MATRIX --- */
+        /* --- INTERACTION LOCKS --- */
         html, body {
             margin: 0;
             padding: 0;
@@ -131,8 +131,7 @@ PLAYER_TEMPLATE = """
             background-color: var(--bg-base);
             color: var(--text-primary);
             font-family: "Roboto", "YouTube Noto", Arial, sans-serif;
-            overflow-x: hidden;
-            overflow_y: auto;
+            overflow: hidden; /* Lock scroll container to prevent messy lower info views */
             
             -webkit-text-size-adjust: 100%;
             -webkit-tap-highlight-color: rgba(0, 0, 0, 0) !important;
@@ -141,74 +140,38 @@ PLAYER_TEMPLATE = """
             user-select: none;
         }
 
-        /* --- MOBILE FORCE-LANDSCAPE ROTATOR --- */
-        @media screen and (max-width: 767px) and (orientation: portrait) {
-            body {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vh !important;
-                height: 100vw !important;
-                transform: rotate(90deg);
-                transform-origin: top left;
-                left: 100vw;
-                overflow: hidden;
-            }
-            
-            .viewport-player-hero {
-                width: 100vh !important;
-                height: 100vw !important;
-            }
-            
-            .viewport-player-hero::after {
-                content: "🔄 Please rotate your device to watch fullscreen";
-                position: absolute;
-                bottom: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                background: rgba(0, 0, 0, 0.85);
-                color: #fff;
-                padding: 10px 16px;
-                border-radius: 20px;
-                font-size: 0.85rem;
-                z-index: 9999;
-                pointer-events: none;
-                white-space: nowrap;
-                border: 1px solid rgba(255,255,255,0.15);
-            }
-            
-            .lower-content-frame { display: none !important; }
-        }
-
-        /* Clean Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg-base); }
-        ::-webkit-scrollbar-thumb { background: #383838; border-radius: 4px; }
-
-        /* --- STAGE A: VIEWPORT LAYER --- */
+        /* --- STAGE A: VIEWPORT LAYER (FULLY DYNAMIC DIMENSIONS) --- */
         .viewport-player-hero {
             position: relative;
-            width: 100vw;
-            height: 56.25vw; /* 16:9 aspect ratio standard constraint initialization value */
-            max-height: 100vh;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
             background-color: #000;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
         }
 
+        /* Force Video.js to respect fluid aspects without structural collapsing */
         .video-js {
             width: 100% !important;
-            height: 100% !important;
+            height: auto !important;
             background-color: #000 !important;
-            -webkit-transform: translateZ(0);
-            transform: translateZ(0);
         }
 
+        /* Prevent portrait/9:16 thumbnails from clipping or layout bursting */
         .vjs-poster {
-            background-size: cover !important;
+            background-size: contain !important;
+            background-repeat: no-repeat !important;
             background-position: center !important;
+            background-color: #000 !important;
             display: block !important;
         }
 
-        /* --- REAL YT-STYLE FLOATING OVERLAY --- */
+        /* Ensure actual video content scales safely inside the viewport engine */
+        .video-js video {
+            object-fit: contain !important;
+        }
+
+        /* --- YT-STYLE FLOATING OVERLAY --- */
         .embed-floating-header {
             position: absolute;
             top: 0;
@@ -266,43 +229,85 @@ PLAYER_TEMPLATE = """
             filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9));
         }
 
-        /* --- STAGE B: LOWER DETAILS FRAME --- */
-        .lower-content-frame {
-            max-width: 1280px;
-            margin: 0 auto;
-            padding: 24px 24px 48px 24px;
+        /* --- STAGE B: UP NEXT RECOMMENDATION SLIDER --- */
+        .up-next-section-frame {
+            max-width: 800px;
+            margin: 16px auto 0 auto;
+            padding: 0 16px;
             box-sizing: border-box;
         }
 
-        .meta-container-block {
+        .up-next-header-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin: 0 0 12px 0;
+            color: var(--text-primary);
+            letter-spacing: 0.3px;
+        }
+
+        .up-next-scroll-container {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            scrollbar-width: none; /* Firefox */
+        }
+        .up-next-scroll-container::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+
+        .up-next-card {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid var(--border-subtle);
-        }
-
-        .display-title-string { font-size: 1.4rem; font-weight: 700; margin: 0; line-height: 1.4; }
-        .profile-row-layout { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
-        .profile-left-anchor { display: flex; align-items: center; gap: 12px; }
-        
-        .subscribe-pill {
-            background: var(--text-primary);
-            color: var(--bg-base);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.88rem;
+            width: 160px;
+            flex-shrink: 0;
             cursor: pointer;
+            text-decoration: none;
+            color: inherit;
         }
 
-        .interaction-pill-group { display: flex; background: #272727; border-radius: 20px; overflow: hidden; }
-        .pill-action-trigger { background: transparent; border: none; color: var(--text-primary); padding: 8px 16px; font-weight: 600; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-        .pill-action-trigger:hover { background: rgba(255,255,255,0.1); }
+        .up-next-thumbnail-wrapper {
+            position: relative;
+            width: 160px;
+            height: 90px;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #1a1a1a;
+        }
+        .up-next-thumbnail-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
 
-        .description-drawer-block { background: #272727; border-radius: 12px; padding: 16px; margin-top: 16px; font-size: 0.93rem; line-height: 1.5; }
-        .desc-stat-row { font-weight: 700; margin-bottom: 8px; display: flex; gap: 16px; }
+        .up-next-duration-badge {
+            position: absolute;
+            bottom: 4px;
+            right: 4px;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .up-next-card-title {
+            font-size: 0.82rem;
+            font-weight: 500;
+            line-height: 1.3;
+            margin: 6px 0 2px 0;
+            color: var(--text-primary);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .up-next-card-creator {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
 
         /* --- VIDEO.JS MODIFICATION MATRIX --- */
         .video-js .vjs-big-play-button {
@@ -314,10 +319,10 @@ PLAYER_TEMPLATE = """
             line-height: 48px !important;
             margin-top: -24px !important;
             margin-left: -34px !important;
+            z-index: 11;
         }
         .video-js:hover .vjs-big-play-button { background-color: var(--accent-primary) !important; }
         
-        /* Explicit layout specifications forcing control layout components to remain rendered */
         .video-js .vjs-control-bar { 
             display: flex !important;
             background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%) !important; 
@@ -326,8 +331,8 @@ PLAYER_TEMPLATE = """
         .video-js .vjs-progress-control { 
             position: absolute !important; 
             width: calc(100% - 24px) !important; 
-            height: 5px !important; 
-            top: -5px !important; 
+            height: 6px !important; 
+            top: -6px !important; 
             left: 12px !important; 
             display: flex !important;
             visibility: visible !important;
@@ -358,94 +363,102 @@ PLAYER_TEMPLATE = """
             </div>
         </div>
 
-        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline>
-            <source src="/manifest?url={{ stream_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
-        </video>
+        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline></video>
         
     </div>
 
-    <div class="lower-content-frame">
-        <div class="meta-container-block">
-            <h1 class="display-title-string">{{ title }}</h1>
-            
-            <div class="profile-row-layout">
-                <div class="profile-left-anchor">
-                    <div class="embed-channel-icon-container" id="avatar-container-lower" style="width:36px;height:36px;font-size:0.95rem"></div>
-                    <div style="display:flex;flex-direction:column;min-width:0">
-                        <span style="font-weight:600;font-size:0.95rem;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">{{ author_name if author_name else "Verified Creator" }}</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary)">Official Channel</span>
-                    </div>
-                    <button class="subscribe-pill">Subscribe</button>
-                </div>
-
-                <div class="interaction-pill-group">
-                    <button class="pill-action-trigger" id="lower-share-trigger">
-                        <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.8 2.04.8 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
-                        <span>Share</span>
-                    </button>
-                </div>
+    <div class="up-next-section-frame">
+        <h2 class="up-next-header-title">Up Next</h2>
+        <div class="up-next-scroll-container" id="up-next-list">
             </div>
-        </div>
-
-        <div class="description-drawer-block">
-            <div class="desc-stat-row">
-                <span>Live Feed</span>
-                <span>Active Stream Pipeline</span>
-            </div>
-            <p style="margin:0;color:#f1f1f1">Adaptive source parsing frame engine online. Listening directly to target data vectors across decoupled infrastructure bounds.</p>
-        </div>
     </div>
 
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
+        // Setup configuration metrics
+        const targetVideoId = "{{ current_video_id }}";
+
         function resolveMediaAssets() {
             let posterUrl = "{{ forced_poster }}".trim();
-            
-            // Validate image string container
             if (!posterUrl || posterUrl === "None" || posterUrl === "") {
-                const rawTargetUrl = "{{ target_url }}";
-                const decodedUrl = decodeURIComponent(rawTargetUrl);
-                let ytMatch = decodedUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/i);
-                posterUrl = (ytMatch && ytMatch[1]) ? `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg` : "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920";
+                posterUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920";
             }
             
             const myVideo = document.getElementById('my-video');
             myVideo.setAttribute('poster', posterUrl);
-            myVideo.style.backgroundImage = "url('" + posterUrl + "')";
 
             // --- RESOLVE CREATOR PROFILE AVATAR ---
             const creatorName = "{{ author_name }}".trim() || "Verified Creator";
             const passedAvatar = "{{ author_avatar_url }}".trim();
-            
             const hudIconContainer = document.getElementById('avatar-container-hud');
-            const lowerIconContainer = document.getElementById('avatar-container-lower');
 
             if (passedAvatar && passedAvatar !== "None" && passedAvatar !== "") {
-                const imgHtml = `<img src="${passedAvatar}" alt="Avatar">`;
-                hudIconContainer.innerHTML = imgHtml;
-                lowerIconContainer.innerHTML = imgHtml;
+                hudIconContainer.innerHTML = `<img src="${passedAvatar}" alt="Avatar">`;
             } else {
                 const firstLetter = creatorName.charAt(0).toUpperCase();
-                const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#009688', '#4CAF50', '#FF5722'];
-                const assignedColor = colors[firstLetter.charCodeAt(0) % colors.length];
-                
-                hudIconContainer.style.backgroundColor = assignedColor;
-                lowerIconContainer.style.backgroundColor = assignedColor;
+                const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3'];
+                hudIconContainer.style.backgroundColor = colors[firstLetter.charCodeAt(0) % colors.length];
                 hudIconContainer.textContent = firstLetter;
-                lowerIconContainer.textContent = firstLetter;
+            }
+        }
+
+        // Fetch recommendations directly using Dailymotion's Endpoint Architecture
+        async function fetchUpNextFeed() {
+            if(!targetVideoId) return;
+            try {
+                const response = await fetch(`https://api.dailymotion.com/video/${targetVideoId}/related?fields=id,title,owner.username,thumbnail_240_url,duration&limit=6`);
+                const data = await response.json();
+                if(data && data.list) {
+                    const listContainer = document.getElementById('up-next-list');
+                    listContainer.innerHTML = '';
+                    
+                    data.list.forEach(item => {
+                        const mins = Math.floor(item.duration / 60);
+                        const secs = String(item.duration % 60).padStart(2, '0');
+                        
+                        const card = document.createElement('a');
+                        card.className = 'up-next-card';
+                        card.href = `/download?id_or_url=${item.id}`;
+                        card.innerHTML = `
+                            <div class="up-next-thumbnail-wrapper">
+                                <img src="${item.thumbnail_240_url}" alt="thumb">
+                                <div class="up-next-duration-badge">${mins}:${secs}</div>
+                            </div>
+                            <div class="up-next-card-title">${item.title}</div>
+                            <div class="up-next-card-creator">${item['owner.username'] || 'Creator'}</div>
+                        `;
+                        listContainer.appendChild(card);
+                    });
+                }
+            } catch(e) {
+                console.error("Dailymotion API tracking exception:", e);
             }
         }
 
         document.addEventListener("DOMContentLoaded", function() {
             resolveMediaAssets();
+            fetchUpNextFeed();
 
+            // Configured Engine for exact seeking handling across 16:9 and 9:16 files
             const player = videojs('my-video', {
                 preload: 'auto',
                 autoplay: false, 
                 controls: true,
-                fluid: true, // Fluid handles structural aspect ratio updates automatically
+                fluid: true, 
                 playsinline: true,
-                webkitPlaysinline: true
+                webkitPlaysinline: true,
+                controlBar: {
+                    progressControl: {
+                        enableTouchPoints: true // High accuracy mobile resolution scrubbing
+                    }
+                }
+            });
+
+            // Set source explicitly via JavaScript to maintain precise playback bounds
+            player.src({
+                src: "/manifest?url={{ stream_url | urlencode }}&priority={{ priority }}",
+                type: 'application/x-mpegURL',
+                exact_seeking: true // Enforces native presentation-timestamp alignment
             });
 
             player.ready(function() {
@@ -463,17 +476,14 @@ PLAYER_TEMPLATE = """
                 controlBar.el().appendChild(downloadBtn);
             });
 
-            function executeNativeShare() {
+            document.getElementById('embed-share-btn').addEventListener('click', function() {
                 if (navigator.share) {
                     navigator.share({ title: document.title, url: window.location.href }).catch(console.error);
                 } else {
                     navigator.clipboard.writeText(window.location.href);
                     alert("Link copied to clipboard memory.");
                 }
-            }
-
-            document.getElementById('embed-share-btn').addEventListener('click', executeNativeShare);
-            document.getElementById('lower-share-trigger').addEventListener('click', executeNativeShare);
+            });
         });
     </script>
 </body>
@@ -497,10 +507,14 @@ def render_player():
     referer = request.headers.get("Referer", "")
     priority_flag = "high" if INTERNAL_INFRASTRUCTURE_HOST in referer else "standard"
 
-    if "dailymotion.com" in user_input:
+    # Extract clean video ID context for use within internal API queries
+    video_id_match = re.search(r'(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)', user_input)
+    clean_video_id = video_id_match.group(1) if video_id_match else user_input
+
+    if "dailymotion.com" in user_input or "dai.ly" in user_input:
         target_url = user_input if user_input.startswith(("http://", "https://")) else f"https://{user_input}"
     else:
-        target_url = f"https://www.dailymotion.com/video/{user_input}"
+        target_url = f"https://www.dailymotion.com/video/{clean_video_id}"
 
     ydl_opts = {
         'format': 'best/any', 
@@ -543,6 +557,7 @@ def render_player():
             return render_template_string(
                 PLAYER_TEMPLATE, 
                 title=info.get('title', 'Native Stream Source'),
+                current_video_id=clean_video_id,
                 target_url=target_url, 
                 stream_url=m3u8_url,   
                 priority=priority_flag,
