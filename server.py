@@ -95,26 +95,18 @@ PLAYER_TEMPLATE = """
             user-select: none;
         }
 
-        /* --- STAGE: VIEWPORT MANAGEMENT --- */
+        /* --- STAGE: FULL VIEWPORT OVERRIDE ENGINE --- */
         .viewport-player-hero {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            height: 450px;
-            margin: 0 auto;
-            background-color: #000;
-            z-index: 1;
-            transition: all 0.1s ease;
-        }
-
-        /* CRITICAL: Target the native browser fullscreen state for our wrapper wrapper */
-        .viewport-player-hero:fullscreen,
-        .viewport-player-hero:-webkit-full-screen,
-        .viewport-player-hero:-ms-fullscreen {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100vw !important;
             height: 100vh !important;
             max-width: 100vw !important;
             max-height: 100vh !important;
+            background-color: #000;
+            z-index: 1;
+            overflow: hidden;
         }
 
         .video-js {
@@ -130,8 +122,9 @@ PLAYER_TEMPLATE = """
             background-color: #000 !important;
         }
 
+        /* Fixed aspect ratio behavior: Scales up to maximum screen bounds without stretching */
         .video-js video { 
-            object-fit: contain !important;
+            object-fit: contain !important; 
             width: 100% !important;
             height: 100% !important;
         }
@@ -264,7 +257,7 @@ PLAYER_TEMPLATE = """
         }
         .endscreen-v-creator { font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* --- VIDEO.JS INTERFACE MODIFICATION MATRIX --- */
+        /* --- VIDEO.JS CONTROL INTERFACE --- */
         .video-js .vjs-big-play-button {
             background-color: rgba(20, 20, 20, 0.85) !important; border: none !important; border-radius: 12px !important;
             width: 68px !important; height: 48px !important; line-height: 48px !important; margin-top: -24px !important; margin-left: -34px !important; z-index: 11;
@@ -415,28 +408,24 @@ PLAYER_TEMPLATE = """
                 downloadBtn.addEventListener('click', function() { window.open(decodedUrl, '_blank'); });
                 controlBar.el().appendChild(downloadBtn);
 
-                // 2. TRUE BROWSER FULLSCREEN INJECTION
+                // 2. TRUE HARDWARE FULLSCREEN INJECTION
                 const fsBtn = document.createElement('div');
                 fsBtn.className = 'vjs-custom-fullscreen-control vjs-control vjs-button';
                 fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
                 
                 fsBtn.addEventListener('click', function() {
                     const wrapper = document.getElementById('player-view-wrapper');
-                    
-                    // Check if browser is currently in fullscreen mode
                     const isCurrentlyFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
                     
                     if (!isCurrentlyFS) {
-                        // Request true browser-level fullscreen on the WRAPPER div (keeps our HTML elements inside)
                         if (wrapper.requestFullscreen) {
                             wrapper.requestFullscreen();
-                        } else if (wrapper.webkitRequestFullscreen) { /* Safari / iOS Chrome */
+                        } else if (wrapper.webkitRequestFullscreen) {
                             wrapper.webkitRequestFullscreen();
                         } else if (wrapper.msRequestFullscreen) {
                             wrapper.msRequestFullscreen();
                         }
                     } else {
-                        // Exit true browser fullscreen mode
                         if (document.exitFullscreen) {
                             document.exitFullscreen();
                         } else if (document.webkitExitFullscreen) {
@@ -449,9 +438,10 @@ PLAYER_TEMPLATE = """
                 controlBar.el().appendChild(fsBtn);
             });
 
-            // Make sure VideoJS re-adjusts bounds when the browser triggers a native fullscreen resize event
             window.addEventListener('resize', function() {
-                player.updateDisplayOpacity();
+                if(player.updateDisplayOpacity) {
+                    player.updateDisplayOpacity();
+                }
             });
 
             document.getElementById('embed-share-btn').addEventListener('click', function() {
