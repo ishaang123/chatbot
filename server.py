@@ -103,66 +103,134 @@ INDEX_TEMPLATE = """
 </html>
 """
 PLAYER_TEMPLATE = """
+PLAYER_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{{ title }}</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
-        /* --- YT-EMBED DESIGN SYSTEM --- */
+        /* --- CORE DESIGN MODULE --- */
         :root {
-            --accent-primary: #ff0000; /* YouTube Red Accent Line */
+            --accent-primary: #ff0000;
+            --bg-base: #0f0f0f;
             --text-primary: #f1f1f1;
-            --text-secondary: #c0c0c0;
-            --gradient-top: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+            --text-secondary: #aaaaaa;
+            --border-subtle: rgba(255, 255, 255, 0.1);
+            --gradient-top: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
         }
 
+        /* --- AGGRESIVE APPLE INTERACTION LOCK MATRIX --- */
         html, body {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
-            background-color: #000;
-            overflow: hidden;
-            font-family: "YouTube Noto", Roboto, Arial, sans-serif;
-            -webkit-user-select: none;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            font-family: "Roboto", "YouTube Noto", Arial, sans-serif;
+            overflow-x: hidden;
+            overflow-y: auto;
+            
+            /* Crucial Webkit Locks: Stops iOS from triggering default tap highlights and scaling resets */
+            -webkit-text-size-adjust: 100%;
+            -webkit-tap-highlight-color: rgba(0, 0, 0, 0) !important;
+            -webkit-touch-callout: none !important;
+            -webkit-user-select: none !important;
             user-select: none;
         }
 
-        .embed-player-canvas {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
+        /* --- MOBILE FORCE-LANDSCAPE ROTATOR --- */
+        /* Targets mobile devices in Portrait orientation */
+        @media screen and (max-width: 767px) and (orientation: portrait) {
+            body {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vh !important;  /* Map width to viewport height */
+                height: 100vw !important; /* Map height to viewport width */
+                transform: rotate(90deg);
+                transform-origin: top left;
+                left: 100vw; /* Shift canvas index into correct window view bounds */
+                overflow: hidden; /* Terminate lower page scrolling until device rotates */
+            }
+            
+            .viewport-player-hero {
+                width: 100vh !important;
+                height: 100vw !important;
+            }
+            
+            /* Display a non-intrusive tilt reminder to prompt user action */
+            .viewport-player-hero::after {
+                content: "🔄 Please rotate your device for standard fullscreen viewing";
+                position: absolute;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(0, 0, 0, 0.85);
+                color: #fff;
+                padding: 10px 16px;
+                border-radius: 20px;
+                font-size: 0.85rem;
+                z-index: 9999;
+                pointer-events: none;
+                white-space: nowrap;
+                border: 1px solid rgba(255,255,255,0.15);
+            }
+            
+            .lower-content-frame {
+                display: none !important; /* Hide details on small portrait view screen bounds */
+            }
         }
 
+        /* Clean Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-base); }
+        ::-webkit-scrollbar-thumb { background: #383838; border-radius: 4px; }
+
+        /* --- STAGE A: VIEWPORT LAYER --- */
+        .viewport-player-hero {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+        }
+
+        /* HARDWARE ACCELERATION LOCK FOR VIDEO WINDOW */
         .video-js {
             width: 100% !important;
             height: 100% !important;
             background-color: #000 !important;
+            /* Prevents native iOS webkit engine wrapper elements from stepping out of boundary layer */
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
         }
 
-        /* --- FLOATING HEADER WITH TITLE & CHANNEL DATA --- */
+        .vjs-poster {
+            background-size: cover !important;
+            background-position: center !important;
+        }
+
+        /* --- YT-STYLE FLOATING HUD HEADER OVERLAY --- */
         .embed-floating-header {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
-            padding: 20px 24px 40px 24px;
+            padding: 24px 24px 48px 24px;
             background: var(--gradient-top);
             z-index: 10;
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
             box-sizing: border-box;
-            pointer-events: none;
+            pointer-events: none; /* Let touches pass right through layout backgrounds */
             opacity: 1;
-            transition: opacity 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+            transition: opacity 0.25s ease;
         }
 
-        /* Fades header out alongside control bar interaction lifecycle */
         .vjs-has-started.vjs-user-inactive .embed-floating-header {
             opacity: 0;
         }
@@ -171,7 +239,7 @@ PLAYER_TEMPLATE = """
             display: flex;
             align-items: center;
             gap: 12px;
-            pointer-events: auto;
+            pointer-events: auto; /* Explicitly restore touch target fields for buttons */
             min-width: 0;
         }
 
@@ -179,93 +247,81 @@ PLAYER_TEMPLATE = """
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #a855f7, #6366f1);
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
             color: #fff;
-            font-size: 0.9rem;
-            flex-shrink: 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-        }
-
-        .embed-meta-text {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-
-        .embed-video-title {
-            color: var(--text-primary);
-            font-size: 1.1rem;
-            font-weight: 500;
-            margin: 0;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            overflow: hidden;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-            text-decoration: none;
-        }
-        .embed-video-title:hover { text-decoration: underline; }
-
-        .embed-channel-name {
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-            margin: 2px 0 0 0;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.9);
-        }
-
-        .embed-header-actions {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            pointer-events: auto;
             flex-shrink: 0;
         }
+
+        .embed-meta-text { display: flex; flex-direction: column; min-width: 0; }
+        .embed-video-title { color: var(--text-primary); font-size: 1.25rem; font-weight: 500; margin: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+        .embed-channel-name { color: var(--text-secondary); font-size: 0.9rem; margin-top: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
+        .embed-header-actions { display: flex; align-items: center; pointer-events: auto; flex-shrink: 0; }
         
         .embed-icon-btn {
             background: transparent;
             border: none;
             color: var(--text-primary);
             cursor: pointer;
-            padding: 6px;
+            padding: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9));
-            transition: transform 0.1s;
         }
-        .embed-icon-btn:hover { transform: scale(1.1); }
 
-        /* --- LOADING LAYER --- */
-        #video-loader {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #000;
-            z-index: 999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: opacity 0.3s ease;
-        }
-        .spinner {
+        /* --- STAGE B: LOWER CONTENT FRAME --- */
+        .lower-content-frame {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 24px 24px 48px 24px;
             box-sizing: border-box;
-            width: 50px;
-            height: 50px;
-            border: 5px solid rgba(255, 255, 255, 0.15);
-            border-top: 5px solid var(--accent-primary);
-            border-radius: 50%;
-            animation: spin 0.7s linear infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* --- VIDEO.JS INTERFACE MODIFICATIONS --- */
+        .meta-container-block {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .display-title-string { font-size: 1.4rem; font-weight: 700; margin: 0; line-height: 1.4; }
+        .profile-row-layout { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        .profile-left-anchor { display: flex; align-items: center; gap: 12px; }
+        
+        .subscribe-pill {
+            background: var(--text-primary);
+            color: var(--bg-base);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.88rem;
+            cursor: pointer;
+            margin-left: 12px;
+        }
+
+        .interaction-pill-group { display: flex; background: #272727; border-radius: 20px; overflow: hidden; }
+        .pill-action-trigger { background: transparent; border: none; color: var(--text-primary); padding: 8px 16px; font-weight: 600; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .pill-action-trigger:hover { background: rgba(255,255,255,0.1); }
+
+        .description-drawer-block { background: #272727; border-radius: 12px; padding: 16px; margin-top: 16px; font-size: 0.93rem; line-height: 1.5; }
+        .desc-stat-row { font-weight: 700; margin-bottom: 8px; display: flex; gap: 16px; }
+
+        .comments-feed-segment { margin-top: 24px; }
+        .comments-meta-header { font-size: 1.2rem; font-weight: 700; margin-bottom: 16px; }
+        .comment-node-row { display: flex; gap: 16px; margin-top: 20px; }
+        .comment-node-avatar { width: 36px; height: 36px; border-radius: 50%; background: #4e4e4e; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem; }
+        .comment-text-panel h5 { margin: 0 0 4px 0; font-size: 0.85rem; color: var(--text-primary); }
+        .comment-text-panel p { margin: 0; font-size: 0.92rem; color: #f1f1f1; line-height: 1.4; }
+
+        /* --- VIDEO.JS INTERFACE CONFIGURATION --- */
         .video-js .vjs-big-play-button {
-            background-color: rgba(33, 33, 33, 0.85) !important;
+            background-color: rgba(20, 20, 20, 0.85) !important;
             border: none !important;
             border-radius: 12px !important;
             width: 68px !important;
@@ -273,132 +329,136 @@ PLAYER_TEMPLATE = """
             line-height: 48px !important;
             margin-top: -24px !important;
             margin-left: -34px !important;
-            transition: background-color 0.1s ease !important;
-            z-index: 20;
         }
-        .video-js:hover .vjs-big-play-button { 
-            background-color: var(--accent-primary) !important; 
-        }
-        
-        .video-js .vjs-control-bar {
-            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.3) 60%, rgba(0,0,0,0) 100%) !important;
-            height: 48px !important;
-            width: 100% !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            border: none !important;
-        }
-        
-        .video-js .vjs-progress-control {
-            position: absolute !important;
-            width: calc(100% - 24px) !important;
-            height: 3px !important;
-            top: -3px !important;
-            left: 12px !important;
-            transition: height 0.1s, top 0.1s;
-        }
+        .video-js:hover .vjs-big-play-button { background-color: var(--accent-primary) !important; }
+        .video-js .vjs-control-bar { background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%) !important; height: 48px !important; }
+        .video-js .vjs-progress-control { position: absolute !important; width: calc(100% - 24px) !important; height: 3px !important; top: -3px !important; left: 12px !important; transition: height 0.1s, top 0.1s; }
         .video-js .vjs-progress-control:hover { height: 5px !important; top: -5px !important; }
         .video-js .vjs-play-progress { background: var(--accent-primary) !important; }
         .video-js .vjs-play-progress:before { display: block !important; font-size: 11px !important; top: -3px !important; color: var(--accent-primary) !important; }
         .video-js .vjs-slider { background-color: rgba(255,255,255,0.2) !important; }
-        .video-js .vjs-load-progress { background-color: rgba(255,255,255,0.35) !important; }
         .video-js .vjs-time-control { line-height: 48px !important; }
-        
+
         .vjs-download-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
-        .vjs-download-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; transition: opacity 0.2s; }
-        .vjs-download-control:hover svg { opacity: 1; }
+        .vjs-download-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; }
     </style>
 </head>
 <body>
 
-    <div class="embed-player-canvas">
+    <div class="viewport-player-hero">
         
         <div class="embed-floating-header" id="embed-header">
             <div class="embed-header-left">
                 <div class="embed-channel-icon">NV</div>
                 <div class="embed-meta-text">
-                    <a class="embed-video-title" id="title-link" target="_blank">{{ title }}</a>
-                    <span class="embed-channel-name">NebulaView Pipeline</span>
+                    <span class="embed-video-title">{{ title }}</span>
+                    <span class="embed-channel-name">NebulaView Core</span>
                 </div>
             </div>
             <div class="embed-header-actions">
-                <button class="embed-icon-btn" id="embed-share-btn" title="Share Video">
+                <button class="embed-icon-btn" id="embed-share-btn" title="Share Link">
                     <svg style="width:22px;height:22px;fill:currentColor" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.8 2.04.8 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
                 </button>
             </div>
         </div>
 
-        <div id="video-loader">
-            <div class="spinner"></div>
-        </div>
-        
-        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline poster="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920&auto=format&fit=crop">
+        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline profile="minimal">
             <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
         </video>
         
     </div>
 
+    <div class="lower-content-frame">
+        <div class="meta-container-block">
+            <h1 class="display-title-string">{{ title }}</h1>
+            
+            <div class="profile-row-layout">
+                <div class="profile-left-anchor">
+                    <div class="embed-channel-icon" style="width:36px;height:36px">NV</div>
+                    <div style="display:flex;flex-direction:column">
+                        <span style="font-weight:600;font-size:0.95rem">NebulaView Core</span>
+                        <span style="font-size:0.78rem;color:var(--text-secondary)">148K subscribers</span>
+                    </div>
+                    <button class="subscribe-pill">Subscribe</button>
+                </div>
+
+                <div class="interaction-pill-group">
+                    <button class="pill-action-trigger" id="lower-share-trigger">
+                        <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.8 2.04.8 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
+                        <span>Share</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="description-drawer-block">
+            <div class="desc-stat-row">
+                <span>12.5K views</span>
+                <span>Jun 9, 2026</span>
+            </div>
+            <p style="margin:0;color:#f1f1f1">Native edge presentation matrix layer deployed successfully. This node handles real-time adaptive parsing routines for high-speed cross-origin media extraction operations directly within the browser runtime.</p>
+        </div>
+    </div>
+
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
+        function extractVideoThumbnail(targetUrlString) {
+            const decodedUrl = decodeURIComponent(targetUrlString);
+            let youtubeMatch = decodedUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/i);
+            if (youtubeMatch && youtubeMatch[1]) {
+                return `https://img.youtube.com/vi/${youtubeMatch[1]}/maxresdefault.jpg`;
+            }
+            return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920&auto=format&fit=crop";
+        }
+
         document.addEventListener("DOMContentLoaded", function() {
-            // Instantiate video framework engine without autoplay parameter overrides
+            const videoElement = document.getElementById('my-video');
+            const inputTargetUrl = "{{ target_url }}"; 
+            videoElement.setAttribute('poster', extractVideoThumbnail(inputTargetUrl));
+
+            // Force Video.js to respect inline mobile containment paradigms
             const player = videojs('my-video', {
                 preload: 'metadata',
                 autoplay: false, 
                 controls: true,
                 fluid: false,
-                html5: {
-                    vhs: {
-                        overrideNative: true,
-                        maxBufferLength: 45,
-                        enableLowInitialPlaylist: true,
-                        fastStart: true
-                    }
-                }
+                playsinline: true,
+                webkitPlaysinline: true,
+                html5: { vhs: { overrideNative: true } }
             });
 
+            // BLOCK APPLE QUICKTIME INTERCEPTION FOR THE MANIFEST TARGET
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
-                downloadBtn.title = 'Open Media Source';
-                downloadBtn.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>`;
+                downloadBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>`;
                 
                 const currentSrc = player.src();
                 const urlParams = new URLSearchParams(currentSrc.split('?')[1]);
                 const targetM3u8Url = urlParams.get('url');
                 const decodedUrl = targetM3u8Url ? decodeURIComponent(targetM3u8Url) : currentSrc;
-                
-                document.getElementById('title-link').href = decodedUrl;
 
-                downloadBtn.addEventListener('click', function() {
-                    window.open(decodedUrl, '_blank');
-                });
+                downloadBtn.addEventListener('click', function() { window.open(decodedUrl, '_blank'); });
                 controlBar.el().appendChild(downloadBtn);
-                
-                // Remove initial load screen since user must explicitly press play
-                const loader = document.getElementById('video-loader');
-                if (loader) {
-                    loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 300);
-                }
             });
 
-            document.getElementById('embed-share-btn').addEventListener('click', function() {
+            function executeNativeShare() {
                 if (navigator.share) {
-                    navigator.share({
-                        title: document.title,
-                        url: window.location.href
-                    }).catch(console.error);
+                    navigator.share({ title: document.title, url: window.location.href }).catch(console.error);
                 } else {
                     navigator.clipboard.writeText(window.location.href);
-                    alert("Share link copied to clipboard.");
+                    alert("Link copied to clipboard memory.");
                 }
-            });
+            }
+
+            document.getElementById('embed-share-btn').addEventListener('click', executeNativeShare);
+            document.getElementById('lower-share-trigger').addEventListener('click', executeNativeShare);
         });
     </script>
 </body>
 </html>
+"""
 """
 
 
