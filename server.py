@@ -102,6 +102,7 @@ INDEX_TEMPLATE = """
 </body>
 </html>
 """
+
 PLAYER_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -131,7 +132,7 @@ PLAYER_TEMPLATE = """
             color: var(--text-primary);
             font-family: "Roboto", "YouTube Noto", Arial, sans-serif;
             overflow-x: hidden;
-            overflow-y: auto;
+            overflow_y: auto;
             
             -webkit-text-size-adjust: 100%;
             -webkit-tap-highlight-color: rgba(0, 0, 0, 0) !important;
@@ -188,7 +189,8 @@ PLAYER_TEMPLATE = """
         .viewport-player-hero {
             position: relative;
             width: 100vw;
-            height: 100vh;
+            height: 56.25vw; /* 16:9 aspect ratio standard constraint initialization value */
+            max-height: 100vh;
             background-color: #000;
         }
 
@@ -203,6 +205,7 @@ PLAYER_TEMPLATE = """
         .vjs-poster {
             background-size: cover !important;
             background-position: center !important;
+            display: block !important;
         }
 
         /* --- REAL YT-STYLE FLOATING OVERLAY --- */
@@ -313,13 +316,24 @@ PLAYER_TEMPLATE = """
             margin-left: -34px !important;
         }
         .video-js:hover .vjs-big-play-button { background-color: var(--accent-primary) !important; }
-        .video-js .vjs-control-bar { background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%) !important; height: 48px !important; }
-        .video-js .vjs-progress-control { position: absolute !important; width: calc(100% - 24px) !important; height: 3px !important; top: -3px !important; left: 12px !important; transition: height 0.1s, top 0.1s; }
-        .video-js .vjs-progress-control:hover { height: 5px !important; top: -5px !important; }
+        
+        /* Explicit layout specifications forcing control layout components to remain rendered */
+        .video-js .vjs-control-bar { 
+            display: flex !important;
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%) !important; 
+            height: 48px !important; 
+        }
+        .video-js .vjs-progress-control { 
+            position: absolute !important; 
+            width: calc(100% - 24px) !important; 
+            height: 5px !important; 
+            top: -5px !important; 
+            left: 12px !important; 
+            display: flex !important;
+            visibility: visible !important;
+        }
         .video-js .vjs-play-progress { background: var(--accent-primary) !important; }
-        .video-js .vjs-play-progress:before { display: block !important; font-size: 11px !important; top: -3px !important; color: var(--accent-primary) !important; }
         .video-js .vjs-slider { background-color: rgba(255,255,255,0.2) !important; }
-        .video-js .vjs-time-control { line-height: 48px !important; }
 
         .vjs-download-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
         .vjs-download-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; }
@@ -331,8 +345,7 @@ PLAYER_TEMPLATE = """
         
         <div class="embed-floating-header" id="embed-header">
             <div class="embed-header-left">
-                <div class="embed-channel-icon-container" id="avatar-container-hud">
-                    </div>
+                <div class="embed-channel-icon-container" id="avatar-container-hud"></div>
                 <div class="embed-meta-text">
                     <span class="embed-video-title">{{ title }}</span>
                     <span class="embed-channel-name">{{ author_name if author_name else "Verified Creator" }}</span>
@@ -346,7 +359,7 @@ PLAYER_TEMPLATE = """
         </div>
 
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline>
-            <source src="/manifest?url={{ target_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
+            <source src="/manifest?url={{ stream_url | urlencode }}&priority={{ priority }}" type="application/x-mpegURL">
         </video>
         
     </div>
@@ -357,8 +370,7 @@ PLAYER_TEMPLATE = """
             
             <div class="profile-row-layout">
                 <div class="profile-left-anchor">
-                    <div class="embed-channel-icon-container" id="avatar-container-lower" style="width:36px;height:36px;font-size:0.95rem">
-                        </div>
+                    <div class="embed-channel-icon-container" id="avatar-container-lower" style="width:36px;height:36px;font-size:0.95rem"></div>
                     <div style="display:flex;flex-direction:column;min-width:0">
                         <span style="font-weight:600;font-size:0.95rem;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">{{ author_name if author_name else "Verified Creator" }}</span>
                         <span style="font-size:0.78rem;color:var(--text-secondary)">Official Channel</span>
@@ -386,21 +398,20 @@ PLAYER_TEMPLATE = """
 
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
-        // --- REAL TIME ASSET RESOLUTION MATRIX ---
         function resolveMediaAssets() {
-            const rawTargetUrl = "{{ target_url }}";
-            const decodedUrl = decodeURIComponent(rawTargetUrl);
+            let posterUrl = "{{ forced_poster }}".trim();
             
-            let posterUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920"; // Fallback poster
-            
-            // Extract authentic YouTube video thumbnail if url matches format patterns
-            let ytMatch = decodedUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/i);
-            if (ytMatch && ytMatch[1]) {
-                posterUrl = `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+            // Validate image string container
+            if (!posterUrl || posterUrl === "None" || posterUrl === "") {
+                const rawTargetUrl = "{{ target_url }}";
+                const decodedUrl = decodeURIComponent(rawTargetUrl);
+                let ytMatch = decodedUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/i);
+                posterUrl = (ytMatch && ytMatch[1]) ? `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg` : "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1920";
             }
             
-            // Inject resolved poster to video node target before instantiation
-            document.getElementById('my-video').setAttribute('poster', posterUrl);
+            const myVideo = document.getElementById('my-video');
+            myVideo.setAttribute('poster', posterUrl);
+            myVideo.style.backgroundImage = "url('" + posterUrl + "')";
 
             // --- RESOLVE CREATOR PROFILE AVATAR ---
             const creatorName = "{{ author_name }}".trim() || "Verified Creator";
@@ -410,15 +421,12 @@ PLAYER_TEMPLATE = """
             const lowerIconContainer = document.getElementById('avatar-container-lower');
 
             if (passedAvatar && passedAvatar !== "None" && passedAvatar !== "") {
-                // If backend provides a real scraped image URL, apply it directly
                 const imgHtml = `<img src="${passedAvatar}" alt="Avatar">`;
                 hudIconContainer.innerHTML = imgHtml;
                 lowerIconContainer.innerHTML = imgHtml;
             } else {
-                // Fallback: Generate an authentic color profile badge matching Google styles
                 const firstLetter = creatorName.charAt(0).toUpperCase();
                 const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#009688', '#4CAF50', '#FF5722'];
-                // Choose index based on letter char code sequence
                 const assignedColor = colors[firstLetter.charCodeAt(0) % colors.length];
                 
                 hudIconContainer.style.backgroundColor = assignedColor;
@@ -429,17 +437,15 @@ PLAYER_TEMPLATE = """
         }
 
         document.addEventListener("DOMContentLoaded", function() {
-            // Run media asset setup engine
             resolveMediaAssets();
 
             const player = videojs('my-video', {
-                preload: 'metadata',
+                preload: 'auto',
                 autoplay: false, 
                 controls: true,
-                fluid: false,
+                fluid: true, // Fluid handles structural aspect ratio updates automatically
                 playsinline: true,
-                webkitPlaysinline: true,
-                html5: { vhs: { overrideNative: true } }
+                webkitPlaysinline: true
             });
 
             player.ready(function() {
@@ -473,16 +479,13 @@ PLAYER_TEMPLATE = """
 </body>
 </html>
 """
+
 # --- ROUTE HANDLERS ---
 
 @app.route('/')
 def index():
     return render_template_string(INDEX_TEMPLATE)
 
-import threading
-from flask import Flask, request, render_template_string
-import yt_dlp
-# Assumes ImpersonateTarget and run_pip_update are imported correctly elsewhere
 
 @app.route('/download', methods=['POST', 'GET'])
 def render_player():
@@ -533,22 +536,19 @@ def render_player():
                 return "No playable stream paths found within the yt_dlp response object.", 404
 
             # --- DYNAMIC METADATA EXTRACTION PIPELINE ---
-            # Extract real thumbnail, real creator name, and look for optional channel avatars
-            video_thumbnail = info.get('thumbnail') or info.get('thumbnails', [{}])[-1].get('url')
+            video_thumbnail = info.get('thumbnail') or (info.get('thumbnails') and info.get('thumbnails')[-1].get('url')) or ""
             creator_name = info.get('uploader') or info.get('channel') or "Verified Creator"
-            
-            # Note: yt_dlp drops missing fields as None, Javascript handles the visual fallback mapping
-            creator_avatar = info.get('uploader_url') # Some extractors drop avatar metadata here or in fields below
+            creator_avatar = info.get('uploader_url') or "" 
             
             return render_template_string(
                 PLAYER_TEMPLATE, 
                 title=info.get('title', 'Native Stream Source'),
-                target_url=target_url, # Pass video link context so JS extracts platform thumbs flawlessly
-                stream_url=m3u8_url,   # Manifest stream source link mapping
+                target_url=target_url, 
+                stream_url=m3u8_url,   
                 priority=priority_flag,
                 author_name=creator_name,
                 author_avatar_url=creator_avatar,
-                forced_poster=video_thumbnail # Drops real scraped thumbnail directly into template landscape
+                forced_poster=video_thumbnail 
             )
             
     except Exception as error:
@@ -556,6 +556,7 @@ def render_player():
         threading.Thread(target=run_pip_update).start()
         
         return f"Extraction Pipeline Exception Error: {str(error)}. A critical engine patch check has been initiated.", 500
+
 
 @app.route('/manifest')
 def proxy_m3u8():
