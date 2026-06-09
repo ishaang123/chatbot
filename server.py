@@ -66,7 +66,6 @@ INDEX_TEMPLATE = """
 </body>
 </html>
 """
-
 PLAYER_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -105,29 +104,17 @@ PLAYER_TEMPLATE = """
             margin: 0 auto;
             background-color: #000;
             z-index: 1;
-            transition: all 0.25s ease;
+            transition: all 0.1s ease;
         }
 
-        /* Our Custom Viewport Override Layer */
-        .viewport-player-hero.pseudo-fullscreen {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
+        /* CRITICAL: Target the native browser fullscreen state for our wrapper wrapper */
+        .viewport-player-hero:fullscreen,
+        .viewport-player-hero:-webkit-full-screen,
+        .viewport-player-hero:-ms-fullscreen {
             width: 100vw !important;
             height: 100vh !important;
             max-width: 100vw !important;
-            z-index: 99999 !important;
-        }
-
-        @media (max-width: 768px) {
-            .viewport-player-hero {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                max-width: 100vw;
-            }
+            max-height: 100vh !important;
         }
 
         .video-js {
@@ -288,7 +275,6 @@ PLAYER_TEMPLATE = """
         .video-js .vjs-play-progress { background: var(--accent-primary) !important; }
         .video-js .vjs-slider { background-color: rgba(255,255,255,0.2) !important; }
         
-        /* Suppress standard control items that trigger mobile layout takeovers */
         .video-js .vjs-fullscreen-control { display: none !important; }
         
         .vjs-download-control, .vjs-custom-fullscreen-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
@@ -416,12 +402,8 @@ PLAYER_TEMPLATE = """
 
             player.ready(function() {
                 const controlBar = player.getChild('controlBar');
-                
-                player.isFullscreen = function() {
-                    return document.getElementById('player-view-wrapper').classList.contains('pseudo-fullscreen');
-                };
 
-                // 1. INJECT NATIVE DOWNLOAD INTERACTION PATHWAY
+                // 1. DOWNLOAD INTERACTION BUTTON
                 const downloadBtn = document.createElement('div');
                 downloadBtn.className = 'vjs-download-control vjs-control vjs-button';
                 downloadBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>`;
@@ -433,17 +415,43 @@ PLAYER_TEMPLATE = """
                 downloadBtn.addEventListener('click', function() { window.open(decodedUrl, '_blank'); });
                 controlBar.el().appendChild(downloadBtn);
 
-                // 2. INJECT PERSISTENT PSEUDO FULLSCREEN ENGINE INTERACTION BUTTON
+                // 2. TRUE BROWSER FULLSCREEN INJECTION
                 const fsBtn = document.createElement('div');
                 fsBtn.className = 'vjs-custom-fullscreen-control vjs-control vjs-button';
                 fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
                 
                 fsBtn.addEventListener('click', function() {
                     const wrapper = document.getElementById('player-view-wrapper');
-                    wrapper.classList.toggle('pseudo-fullscreen');
-                    window.dispatchEvent(new Event('resize'));
+                    
+                    // Check if browser is currently in fullscreen mode
+                    const isCurrentlyFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+                    
+                    if (!isCurrentlyFS) {
+                        // Request true browser-level fullscreen on the WRAPPER div (keeps our HTML elements inside)
+                        if (wrapper.requestFullscreen) {
+                            wrapper.requestFullscreen();
+                        } else if (wrapper.webkitRequestFullscreen) { /* Safari / iOS Chrome */
+                            wrapper.webkitRequestFullscreen();
+                        } else if (wrapper.msRequestFullscreen) {
+                            wrapper.msRequestFullscreen();
+                        }
+                    } else {
+                        // Exit true browser fullscreen mode
+                        if (document.exitFullscreen) {
+                            document.exitFullscreen();
+                        } else if (document.webkitExitFullscreen) {
+                            document.webkitExitFullscreen();
+                        } else if (document.msExitFullscreen) {
+                            document.msExitFullscreen();
+                        }
+                    }
                 });
                 controlBar.el().appendChild(fsBtn);
+            });
+
+            // Make sure VideoJS re-adjusts bounds when the browser triggers a native fullscreen resize event
+            window.addEventListener('resize', function() {
+                player.updateDisplayOpacity();
             });
 
             document.getElementById('embed-share-btn').addEventListener('click', function() {
