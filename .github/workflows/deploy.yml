@@ -18,4 +18,4 @@ jobs:
         host: ${{ secrets.PA_HOST }}
         username: cggamesservers
         key: ${{ secrets.PA_PRIVATE_KEY }}
-        script: cd /home/cggamesservers/mysite && git fetch --all && git reset --hard origin/main && pip3.9 install -r requirements.txt --user && touch /var/www/cggamesservers_pythonanywhere_com_wsgi.py
+        script: cd ~/mysite && git fetch --all && git reset --hard origin/main && pip3.9 install -r requirements.txt --user && touch /var/www/cggamesservers_pythonanywhere_com_wsgi.py
