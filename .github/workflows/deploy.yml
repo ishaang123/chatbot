@@ -22,4 +22,4 @@ jobs:
           cd /home/cggamesservers/mysite
           git fetch --all
           git reset --hard origin/main
-          touch /var/www/cggamesservers_pythonanywhere_com_wsgi.py
+          touch ~/../var/www/*_wsgi.py
