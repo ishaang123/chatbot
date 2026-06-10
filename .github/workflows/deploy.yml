@@ -20,5 +20,6 @@ jobs:
         key: ${{ secrets.PA_PRIVATE_KEY }}
         script: |
           cd /home/cggamesservers/mysite
-          git pull origin main
+          git fetch --all
+          git reset --hard origin/main
           touch /var/www/cggamesservers_pythonanywhere_com_wsgi.py
