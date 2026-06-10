@@ -19,6 +19,8 @@ jobs:
         username: cggamesservers
         key: ${{ secrets.PA_PRIVATE_KEY }}
         script: |
+          exec 2>&1
+          set -x
           cd /home/cggamesservers/mysite
           git fetch https://github.com/ishaang123/chatbot.git main
           git reset --hard FETCH_HEAD
