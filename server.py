@@ -1,7 +1,6 @@
 import os
 import re
 import sys
-import subprocess
 import threading
 import time
 import urllib.parse
@@ -10,31 +9,9 @@ from flask import Flask, request, Response, render_template_string
 import yt_dlp
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
-update_lock = threading.Lock()
-
-def run_pip_update():
-    if update_lock.locked():
-        return
-    with update_lock:
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-        except Exception:
-            pass
-
-def upgrade_extractor_engine_loop():
-    time.sleep(5)
-    while True:
-        run_pip_update()
-        time.sleep(7200)
-
-threading.Thread(target=upgrade_extractor_engine_loop, daemon=True).start()
-
 app = Flask(__name__)
 
+# Configure an optimized connection pool for proxying
 http_pool = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
 http_pool.mount('http://', adapter)
@@ -66,6 +43,7 @@ INDEX_TEMPLATE = """
 </body>
 </html>
 """
+
 PLAYER_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -146,7 +124,6 @@ PLAYER_TEMPLATE = """
             transition: opacity 0.25s ease;
         }
 
-        /* HUD visibility maps cleanly to Video.js internal player state engine */
         .video-js.vjs-user-inactive ~ #embed-header { 
             opacity: 0; 
             pointer-events: none;
@@ -538,7 +515,7 @@ def render_player():
             )
             
     except Exception as error:
-        threading.Thread(target=run_pip_update).start()
+        # Avoid crashing running server systems on permission-locked cloud layers
         return f"Extraction Pipeline Exception Error: {str(error)}", 500
 
 @app.route('/manifest')
