@@ -56,63 +56,43 @@ PLAYER_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{{ title }}</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-    <style>
+<style>
 :root {
-    --accent-primary: #ff3b3b;
+    --accent: #ff3b3b;
 
-    /* EXTREME GLASS SYSTEM */
-    --glass-ultra: rgba(255, 255, 255, 0.05);
-    --glass-mid: rgba(255, 255, 255, 0.08);
-    --glass-strong: rgba(255, 255, 255, 0.12);
-    --glass-border: rgba(255, 255, 255, 0.14);
+    /* CONTROLLED GLASS SYSTEM (IMPORTANT FIX) */
+    --glass-1: rgba(255,255,255,0.06);
+    --glass-2: rgba(255,255,255,0.09);
+    --glass-3: rgba(255,255,255,0.14);
 
-    --blur-ultra: blur(28px);
-    --blur-strong: blur(22px);
-    --blur-mid: blur(16px);
+    --blur-1: blur(10px);
+    --blur-2: blur(16px);
+    --blur-3: blur(22px);
 
-    --text-primary: rgba(255,255,255,0.92);
-    --text-secondary: rgba(255,255,255,0.65);
+    --text: rgba(255,255,255,0.92);
+    --muted: rgba(255,255,255,0.6);
 
-    --shadow-glass: 0 20px 60px rgba(0,0,0,0.65);
-    --inner-glow: inset 0 1px 0 rgba(255,255,255,0.12);
+    --shadow: 0 18px 45px rgba(0,0,0,0.55);
 }
 
+/* BACKGROUND (LESS DISTRACTING = BIG IMPROVEMENT) */
 html, body {
     margin: 0;
-    padding: 0;
-    width: 100%;
     height: 100%;
     overflow: hidden;
-    background: radial-gradient(circle at top, #151823 0%, #0a0c12 55%, #05060a 100%);
-    font-family: "Roboto", Arial, sans-serif;
-    color: var(--text-primary);
+    background: radial-gradient(circle at top, #141824 0%, #07080c 70%);
+    font-family: Arial, sans-serif;
+    color: var(--text);
 }
 
-/* =========================
-   GLOBAL GLASS LAYER BASE
-========================= */
-.glass {
-    background: var(--glass-ultra);
-    backdrop-filter: var(--blur-ultra);
-    -webkit-backdrop-filter: var(--blur-ultra);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--shadow-glass), var(--inner-glow);
-}
-
-/* =========================
-   PLAYER WRAPPER
-========================= */
+/* PLAYER WRAPPER (LIGHT GLASS ONLY) */
 .viewport-player-hero {
     position: absolute;
     inset: 0;
-    background: rgba(0,0,0,0.35);
-    backdrop-filter: var(--blur-mid);
-    -webkit-backdrop-filter: var(--blur-mid);
+    background: rgba(0,0,0,0.25);
 }
 
-/* =========================
-   VIDEO AREA
-========================= */
+/* VIDEO (KEEP CLEAN — IMPORTANT) */
 .video-js {
     width: 100% !important;
     height: 100% !important;
@@ -123,207 +103,139 @@ html, body {
     object-fit: contain !important;
 }
 
-/* Poster gets dreamy blur edge */
-.vjs-poster {
-    filter: blur(1px) brightness(0.85) saturate(1.2);
-    transform: scale(1.02);
-}
-
 /* =========================
-   TOP GLASS HUD
+   TOP HUD (STRONGEST GLASS LAYER)
 ========================= */
 .embed-floating-header {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
-    padding: 16px 18px 44px;
-    background: rgba(255,255,255,0.04);
-    backdrop-filter: var(--blur-ultra);
-    -webkit-backdrop-filter: var(--blur-ultra);
+    padding: 14px 16px 40px;
+
+    background: rgba(20,20,28,0.35);
+    backdrop-filter: var(--blur-3);
+    -webkit-backdrop-filter: var(--blur-3);
+
     border-bottom: 1px solid rgba(255,255,255,0.08);
-    box-shadow: var(--shadow-glass);
+    box-shadow: var(--shadow);
+
     display: flex;
     justify-content: space-between;
     z-index: 10;
 }
 
-/* fade logic */
-.video-js.vjs-user-inactive ~ #embed-header { opacity: 0; }
-.video-js.vjs-user-active ~ #embed-header,
-.video-js.vjs-paused ~ #embed-header { opacity: 1; }
-
-/* =========================
-   AVATAR GLASS ORB
-========================= */
+/* AVATAR (SOFT GLASS ORB) */
 .embed-channel-icon-container {
-    width: 44px;
-    height: 44px;
+    width: 42px;
+    height: 42px;
     border-radius: 50%;
-    background: radial-gradient(circle at top, rgba(255,255,255,0.18), rgba(255,255,255,0.03));
-    backdrop-filter: var(--blur-ultra);
-    -webkit-backdrop-filter: var(--blur-ultra);
-    border: 1px solid rgba(255,255,255,0.18);
-    box-shadow:
-        0 10px 30px rgba(0,0,0,0.5),
-        inset 0 1px 0 rgba(255,255,255,0.25);
+
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: var(--blur-2);
+
+    border: 1px solid rgba(255,255,255,0.12);
+
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
+
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
 
-/* TEXT GLOW */
+/* TEXT (CLEANER, LESS GLOW) */
 .embed-video-title {
-    font-size: 1.05rem;
+    font-size: 1rem;
     font-weight: 600;
-    text-shadow: 0 2px 20px rgba(0,0,0,0.8);
+    color: var(--text);
 }
 
 .embed-channel-name {
-    color: var(--text-secondary);
+    font-size: 0.85rem;
+    color: var(--muted);
 }
 
 /* =========================
-   GLASS BUTTONS
+   BUTTONS (MODERN GLASS, NOT OVERDONE)
 ========================= */
 .embed-icon-btn {
-    background: rgba(255,255,255,0.06);
-    backdrop-filter: var(--blur-strong);
-    -webkit-backdrop-filter: var(--blur-strong);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 14px;
-    padding: 10px;
-    transition: 0.25s ease;
-    box-shadow: var(--inner-glow);
+    background: rgba(255,255,255,0.07);
+    backdrop-filter: var(--blur-2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 9px;
+    transition: 0.2s ease;
 }
 
 .embed-icon-btn:hover {
     background: rgba(255,255,255,0.12);
-    transform: translateY(-2px) scale(1.03);
+    transform: translateY(-2px);
 }
 
 /* =========================
-   END SCREEN GLASS WALL
+   END SCREEN (LIGHTER GLASS)
 ========================= */
 .player-endscreen-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(10,10,15,0.55);
-    backdrop-filter: blur(30px);
-    -webkit-backdrop-filter: blur(30px);
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: var(--blur-3);
     display: none;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    z-index: 12;
+    flex-direction: column;
 }
 
-/* TITLE FLOAT */
-.endscreen-title {
-    font-size: 1.4rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    text-shadow: 0 0 25px rgba(255,255,255,0.08);
-}
-
-/* GRID FLOATING PANELS */
-.endscreen-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 18px;
-    max-width: 780px;
-    width: 100%;
-}
-
-/* GLASS CARDS (HEAVY) */
+/* CARDS (MOST IMPORTANT FIX) */
 .endscreen-card {
     display: flex;
     gap: 12px;
-    padding: 12px;
-    border-radius: 18px;
+    padding: 10px;
+    border-radius: 14px;
 
-    background: rgba(255,255,255,0.05);
-    backdrop-filter: var(--blur-ultra);
-    -webkit-backdrop-filter: var(--blur-ultra);
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: var(--blur-2);
 
-    border: 1px solid rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.1);
 
-    box-shadow:
-        0 15px 40px rgba(0,0,0,0.6),
-        inset 0 1px 0 rgba(255,255,255,0.18);
-
-    transition: 0.3s ease;
+    box-shadow: var(--shadow);
+    transition: 0.25s ease;
 }
 
 .endscreen-card:hover {
-    transform: translateY(-6px) scale(1.01);
+    transform: translateY(-4px);
     background: rgba(255,255,255,0.1);
 }
 
-/* THUMB GLASS FRAME */
+/* THUMB (LESS GLOW, MORE CLEAN) */
 .endscreen-thumb-container {
-    width: 132px;
-    height: 76px;
-    border-radius: 12px;
+    width: 130px;
+    height: 74px;
+    border-radius: 10px;
     overflow: hidden;
-    position: relative;
-
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
-}
-
-/* DURATION PILL */
-.endscreen-duration {
-    position: absolute;
-    bottom: 6px;
-    right: 6px;
-    font-size: 0.7rem;
-
-    background: rgba(0,0,0,0.5);
-    backdrop-filter: blur(10px);
-
-    border: 1px solid rgba(255,255,255,0.15);
-    padding: 2px 6px;
-    border-radius: 999px;
 }
 
 /* =========================
-   PLAYER CONTROLS GLASS
+   CONTROL BAR (LESS NOISE)
 ========================= */
 .video-js .vjs-control-bar {
-    background: rgba(255,255,255,0.04) !important;
-    backdrop-filter: var(--blur-ultra);
-    -webkit-backdrop-filter: var(--blur-ultra);
+    background: rgba(15,15,20,0.4) !important;
+    backdrop-filter: var(--blur-3);
     border-top: 1px solid rgba(255,255,255,0.08);
-    box-shadow: var(--shadow-glass);
-}
-
-.video-js .vjs-progress-control {
-    height: 6px !important;
 }
 
 .video-js .vjs-play-progress {
-    background: var(--accent-primary) !important;
-    box-shadow: 0 0 12px var(--accent-primary);
+    background: var(--accent) !important;
+    box-shadow: 0 0 10px var(--accent);
 }
 
-/* BIG PLAY BUTTON = FLOATING GLASS ORB */
+/* BIG PLAY BUTTON (SIMPLIFIED) */
 .video-js .vjs-big-play-button {
-    background: rgba(255,255,255,0.06) !important;
-    backdrop-filter: blur(24px);
-    border: 1px solid rgba(255,255,255,0.18) !important;
-    border-radius: 16px !important;
-    box-shadow: var(--shadow-glass), var(--inner-glow);
-}
-
-/* LOADER ULTRA GLASS */
-.video-js .vjs-loading-spinner {
-    border: 3px solid rgba(255,255,255,0.1) !important;
-    border-top: 3px solid rgba(255,80,80,0.9) !important;
-    backdrop-filter: blur(20px);
-    width: 52px !important;
-    height: 52px !important;
-    border-radius: 50%;
+    background: rgba(255,255,255,0.08) !important;
+    backdrop-filter: var(--blur-2);
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    border-radius: 14px !important;
 }
 </style>
 </head>
