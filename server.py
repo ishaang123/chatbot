@@ -312,7 +312,6 @@ PLAYER_TEMPLATE = """
     <script>
         const targetVideoId = "{{ current_video_id }}";
 
-        // Push clean video identity context directly to Apple iOS Media Engine HUD
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: "{{ title }}",
@@ -388,7 +387,7 @@ PLAYER_TEMPLATE = """
                 fluid: false, 
                 playsinline: true, 
                 webkitPlaysinline: true,
-                preferFullWindow: false, // Core change: allows native mobile interface breakout protocols
+                preferFullWindow: false, 
                 controlBar: {
                     progressControl: { enableTouchPoints: true }
                 }
@@ -423,33 +422,34 @@ PLAYER_TEMPLATE = """
                 downloadBtn.addEventListener('click', function() { window.open(decodedUrl, '_blank'); });
                 controlBar.el().appendChild(downloadBtn);
 
-                // 2. TRUE MOBILE COMPATIBLE HARDWARE FULLSCREEN WITH IOS BROKEN-API BYPASS
+                // 2. UNRESTRICTED DIRECT HARDWARE MOBILE FULLSCREEN BYPASS
                 const fsBtn = document.createElement('div');
                 fsBtn.className = 'vjs-custom-fullscreen-control vjs-control vjs-button';
                 fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
                 
                 fsBtn.addEventListener('click', function() {
-                    const videoEl = player.tech({ IWillNotUseThisInPlugins: true }).el(); // Captures deep browser webkit media instances
+                    // Pull direct baseline DOM node created by the video layer engine
+                    const videoEl = document.getElementById('my-video_html5_api') || player.tech({ IWillNotUseThisInPlugins: true }).el();
 
-                    if (!player.isFullscreen()) {
+                    if (videoEl) {
+                        // Direct iOS Safari Pipeline execution
                         if (videoEl.webkitEnterFullscreen) {
-                            videoEl.webkitEnterFullscreen(); // Direct target hijack for iOS layout containment
+                            videoEl.webkitEnterFullscreen();
+                        } 
+                        // Direct Android Chrome / Standard W3C execution
+                        else if (videoEl.requestFullscreen) {
+                            videoEl.requestFullscreen();
+                        } else if (videoEl.msRequestFullscreen) {
+                            videoEl.msRequestFullscreen();
+                        } else if (videoEl.mozRequestFullScreen) {
+                            videoEl.mozRequestFullScreen();
                         } else {
-                            player.requestFullscreen(); // W3C engine standards layout for desktop/Android ecosystem
+                            player.requestFullscreen();
                         }
 
+                        // Force rotation configuration lock if ecosystem supports it
                         if (screen.orientation && screen.orientation.lock) {
                             screen.orientation.lock('landscape').catch(() => {});
-                        }
-                    } else {
-                        if (videoEl.webkitExitFullscreen) {
-                            videoEl.webkitExitFullscreen();
-                        } else {
-                            player.exitFullscreen();
-                        }
-
-                        if (screen.orientation && screen.orientation.unlock) {
-                            screen.orientation.unlock();
                         }
                     }
                 });
