@@ -1,9 +1,9 @@
-name: Deploy to PythonAnywhere!
+name: Deploy to PythonAnywhere
 
 on:
   push:
     branches:
-      - main  # Change this if your default branch is 'master'
+      - main
 
 jobs:
   deploy:
@@ -16,14 +16,9 @@ jobs:
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.PA_HOST }}
-        username: your_pythonanywhere_username  # <-- Change to your actual PA username
+        username: cggamesservers
         key: ${{ secrets.PA_PRIVATE_KEY }}
         script: |
-          cd /home/your_pythonanywhere_username/your_project_folder  # <-- Change to your app's directory
+          cd /home/cggamesservers/mysite
           git pull origin main
-          
-          # Optional: Upgrade packages if you updated requirements.txt
-          # source myenv/bin/activate && pip install -r requirements.txt
-          
-          # Reload the web app so changes go live immediately
-          touch /var/www/your_pythonanywhere_username_pythonanywhere_com_wsgi.py  # <-- Change to your WSGI file name
+          touch /var/www/cggamesservers_pythonanywhere_com_wsgi.py
