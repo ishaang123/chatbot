@@ -11,9 +11,13 @@ from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
 
-# Configure an optimized connection pool for proxying
+# Highly optimized connection pool for immediate data passthrough
 http_pool = requests.Session()
-adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200, pool_block=False)
+adapter = requests.adapters.HTTPAdapter(
+    pool_connections=500,       # Bumped for high-concurrency scrubbing/seeking
+    pool_maxsize=500, 
+    pool_block=False
+)
 http_pool.mount('http://', adapter)
 http_pool.mount('https://', adapter)
 
@@ -73,7 +77,6 @@ PLAYER_TEMPLATE = """
             user-select: none;
         }
 
-        /* --- STAGE: FULL VIEWPORT OVERRIDE ENGINE --- */
         .viewport-player-hero {
             position: absolute;
             top: 0;
@@ -106,7 +109,6 @@ PLAYER_TEMPLATE = """
             height: 100% !important;
         }
 
-        /* --- FLOATING HEADER --- */
         .embed-floating-header {
             position: absolute;
             top: 0;
@@ -160,7 +162,6 @@ PLAYER_TEMPLATE = """
             filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); pointer-events: auto;
         }
 
-        /* --- INTERACTIVE END SCREEN --- */
         .player-endscreen-overlay {
             position: absolute;
             top: 0;
@@ -243,7 +244,6 @@ PLAYER_TEMPLATE = """
         }
         .endscreen-v-creator { font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* --- VIDEO.JS CONTROL INTERFACE --- */
         .video-js .vjs-big-play-button {
             background-color: rgba(20, 20, 20, 0.85) !important; border: none !important; border-radius: 12px !important;
             width: 68px !important; height: 48px !important; line-height: 48px !important; margin-top: -24px !important; margin-left: -34px !important; z-index: 11;
@@ -260,7 +260,6 @@ PLAYER_TEMPLATE = """
         .vjs-download-control svg, .vjs-custom-fullscreen-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; }
         .vjs-download-control svg:hover, .vjs-custom-fullscreen-control svg:hover { opacity: 1; }
 
-        /* --- MODERN MINIMALIST GLOW LOADER ENGINE --- */
         .video-js .vjs-loading-spinner {
             border: 3px solid rgba(255, 255, 255, 0.1) !important;
             border-top: 3px solid var(--accent-primary) !important;
@@ -312,6 +311,15 @@ PLAYER_TEMPLATE = """
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
         const targetVideoId = "{{ current_video_id }}";
+
+        // Push clean video identity context directly to Apple iOS Media Engine HUD
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: "{{ title }}",
+                artist: "{{ author_name if author_name else 'Verified Creator' }}",
+                artwork: [{ src: "{{ forced_poster }}", sizes: '512x512', type: 'image/jpeg' }]
+            });
+        }
 
         function resolveMediaAssets() {
             let posterUrl = "{{ forced_poster }}".trim();
@@ -380,6 +388,7 @@ PLAYER_TEMPLATE = """
                 fluid: false, 
                 playsinline: true, 
                 webkitPlaysinline: true,
+                preferFullWindow: true, // Forces layout full-window rendering over iOS native layout hijack
                 controlBar: {
                     progressControl: { enableTouchPoints: true }
                 }
@@ -515,7 +524,6 @@ def render_player():
             )
             
     except Exception as error:
-        # Avoid crashing running server systems on permission-locked cloud layers
         return f"Extraction Pipeline Exception Error: {str(error)}", 500
 
 @app.route('/manifest')
@@ -527,7 +535,7 @@ def proxy_m3u8():
 
     raw_m3u8_url = urllib.parse.unquote(raw_m3u8_url)
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
         'Accept': '*/*',
     }
     
@@ -563,8 +571,9 @@ def proxy_m3u8():
         else:
             rewritten_lines.append(line_stripped)
 
-    response = Response("\n".join(rewritten_lines), content_type="application/x-mpegURL")
-    response.headers["Cache-Control"] = "public, max-age=3"
+    # CRITICAL: Use correct Apple HTTP Live Streaming Content Type
+    response = Response("\n".join(rewritten_lines), content_type="application/vnd.apple.mpegurl")
+    response.headers["Cache-Control"] = "public, max-age=2"
     return response
 
 @app.route('/segment')
@@ -575,21 +584,33 @@ def proxy_ts_segment():
         return "Missing segment sequence indices", 400
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
+    
+    # Mirror matching engine profiles so Dailymotion connection tracks don't close
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
         'Accept': '*/*',
+        'Connection': 'keep-alive'
     }
-    timeout_val = 4 if priority == "high" else 5
+    timeout_val = 4 if priority == "high" else 6
     
     try:
         req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
         content_type = req.headers.get('Content-Type', 'video/MP2T')
         
+        # Pull original length so client native seekers can compute byte range offsets instantly
+        content_length = req.headers.get('Content-Length')
+
         def stream_ts_data():
-            for block in req.iter_content(chunk_size=1024 * 256):
-                yield block
+            # Drop block size to 16KB for zero pipeline lag when fast forwarding
+            for block in req.iter_content(chunk_size=1024 * 16):
+                if block:
+                    yield block
 
         response = Response(stream_ts_data(), content_type=content_type)
+        if content_length:
+            response.headers['Content-Length'] = content_length
+            
+        # Keep aggressive edge caching for instant segment re-reads when seeking backwards
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
     except Exception:
