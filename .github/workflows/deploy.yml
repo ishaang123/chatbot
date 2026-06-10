@@ -20,5 +20,6 @@ jobs:
         key: ${{ secrets.PA_PRIVATE_KEY }}
         script: |
           cd /home/cggamesservers/mysite
-          git pull origin main
+          git fetch https://github.com/ishaang123/chatbot.git main
+          git reset --hard FETCH_HEAD
           touch /var/www/cggamesservers_pythonanywhere_com_wsgi.py
