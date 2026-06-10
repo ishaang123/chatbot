@@ -1,0 +1,29 @@
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    branches:
+      - main  # Change this if your default branch is 'master'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Execute remote SSH commands to deploy
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.PA_HOST }}
+        username: your_pythonanywhere_username  # <-- Change to your actual PA username
+        key: ${{ secrets.PA_PRIVATE_KEY }}
+        script: |
+          cd /home/your_pythonanywhere_username/your_project_folder  # <-- Change to your app's directory
+          git pull origin main
+          
+          # Optional: Upgrade packages if you updated requirements.txt
+          # source myenv/bin/activate && pip install -r requirements.txt
+          
+          # Reload the web app so changes go live immediately
+          touch /var/www/your_pythonanywhere_username_pythonanywhere_com_wsgi.py  # <-- Change to your WSGI file name
