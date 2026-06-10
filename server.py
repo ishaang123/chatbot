@@ -488,8 +488,7 @@ def render_player():
         'check_formats': 'cached',          
         'extract_flat': False,
         'impersonate': ImpersonateTarget.from_str('chrome'),
-        'socket_timeout': 5,                
-        'extractor_args': {'dailymotion': {'pubkey': ['']}},
+        'socket_timeout': 5
     }
 
     try:
