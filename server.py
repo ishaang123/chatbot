@@ -57,228 +57,275 @@ PLAYER_TEMPLATE = """
     <title>{{ title }}</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
-        :root {
-            --accent-primary: #ff0000;
-            --bg-base: #0f0f0f;
-            --text-primary: #f1f1f1;
-            --text-secondary: #aaaaaa;
-            --gradient-top: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
-        }
+:root {
+    --accent-primary: #ff3b3b;
 
-        html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background-color: var(--bg-base);
-            color: var(--text-primary);
-            font-family: "Roboto", Arial, sans-serif;
-            overflow: hidden;
-            user-select: none;
-        }
+    /* EXTREME GLASS SYSTEM */
+    --glass-ultra: rgba(255, 255, 255, 0.05);
+    --glass-mid: rgba(255, 255, 255, 0.08);
+    --glass-strong: rgba(255, 255, 255, 0.12);
+    --glass-border: rgba(255, 255, 255, 0.14);
 
-        .viewport-player-hero {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw !important;
-            height: 100vh !important;
-            max-width: 100vw !important;
-            max-height: 100vh !important;
-            background-color: #000;
-            z-index: 1;
-            overflow: hidden;
-        }
+    --blur-ultra: blur(28px);
+    --blur-strong: blur(22px);
+    --blur-mid: blur(16px);
 
-        .video-js {
-            width: 100% !important;
-            height: 100% !important;
-            background-color: #000 !important;
-        }
+    --text-primary: rgba(255,255,255,0.92);
+    --text-secondary: rgba(255,255,255,0.65);
 
-        .vjs-poster {
-            background-size: contain !important;
-            background-repeat: no-repeat !important;
-            background-position: center !important;
-            background-color: #000 !important;
-        }
+    --shadow-glass: 0 20px 60px rgba(0,0,0,0.65);
+    --inner-glow: inset 0 1px 0 rgba(255,255,255,0.12);
+}
 
-        .video-js video { 
-            object-fit: contain !important; 
-            width: 100% !important;
-            height: 100% !important;
-        }
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(circle at top, #151823 0%, #0a0c12 55%, #05060a 100%);
+    font-family: "Roboto", Arial, sans-serif;
+    color: var(--text-primary);
+}
 
-        .embed-floating-header {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            padding: 24px 24px 48px 24px;
-            background: var(--gradient-top);
-            z-index: 10;
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            box-sizing: border-box;
-            pointer-events: none;
-            opacity: 1;
-            transition: opacity 0.25s ease;
-        }
+/* =========================
+   GLOBAL GLASS LAYER BASE
+========================= */
+.glass {
+    background: var(--glass-ultra);
+    backdrop-filter: var(--blur-ultra);
+    -webkit-backdrop-filter: var(--blur-ultra);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-glass), var(--inner-glow);
+}
 
-        .video-js.vjs-user-inactive ~ #embed-header { 
-            opacity: 0; 
-            pointer-events: none;
-        }
-        .video-js.vjs-user-active ~ #embed-header,
-        .video-js.vjs-paused ~ #embed-header { 
-            opacity: 1; 
-            pointer-events: auto;
-        }
+/* =========================
+   PLAYER WRAPPER
+========================= */
+.viewport-player-hero {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: var(--blur-mid);
+    -webkit-backdrop-filter: var(--blur-mid);
+}
 
-        .embed-header-left { display: flex; align-items: center; gap: 12px; pointer-events: auto; min-width: 0; }
+/* =========================
+   VIDEO AREA
+========================= */
+.video-js {
+    width: 100% !important;
+    height: 100% !important;
+    background: #000 !important;
+}
 
-        .embed-channel-icon-container {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            background: #272727;
-            font-weight: 700;
-            color: #fff;
-        }
-        .embed-channel-icon-container img { width: 100%; height: 100%; object-fit: cover; }
+.video-js video {
+    object-fit: contain !important;
+}
 
-        .embed-meta-text { display: flex; flex-direction: column; min-width: 0; }
-        .embed-video-title { color: var(--text-primary); font-size: 1.1rem; font-weight: 500; margin: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
-        .embed-channel-name { color: var(--text-secondary); font-size: 0.85rem; margin-top: 2px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-         
-        .embed-icon-btn {
-            background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 8px;
-            filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); pointer-events: auto;
-        }
+/* Poster gets dreamy blur edge */
+.vjs-poster {
+    filter: blur(1px) brightness(0.85) saturate(1.2);
+    transform: scale(1.02);
+}
 
-        .player-endscreen-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.92);
-            z-index: 12; 
-            display: none; 
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            box-sizing: border-box;
-            padding: 32px 24px;
-        }
+/* =========================
+   TOP GLASS HUD
+========================= */
+.embed-floating-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 16px 18px 44px;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: var(--blur-ultra);
+    -webkit-backdrop-filter: var(--blur-ultra);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    box-shadow: var(--shadow-glass);
+    display: flex;
+    justify-content: space-between;
+    z-index: 10;
+}
 
-        .endscreen-title {
-            font-size: 1.3rem;
-            font-weight: 700;
-            margin-bottom: 20px;
-            align-self: flex-start;
-            width: 100%;
-            max-width: 720px;
-            margin-left: auto;
-            margin-right: auto;
-            letter-spacing: 0.5px;
-        }
+/* fade logic */
+.video-js.vjs-user-inactive ~ #embed-header { opacity: 0; }
+.video-js.vjs-user-active ~ #embed-header,
+.video-js.vjs-paused ~ #embed-header { opacity: 1; }
 
-        .endscreen-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            width: 100%;
-            max-width: 720px;
-            overflow-y: auto;
-        }
+/* =========================
+   AVATAR GLASS ORB
+========================= */
+.embed-channel-icon-container {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle at top, rgba(255,255,255,0.18), rgba(255,255,255,0.03));
+    backdrop-filter: var(--blur-ultra);
+    -webkit-backdrop-filter: var(--blur-ultra);
+    border: 1px solid rgba(255,255,255,0.18);
+    box-shadow:
+        0 10px 30px rgba(0,0,0,0.5),
+        inset 0 1px 0 rgba(255,255,255,0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
 
-        @media (max-width: 560px) {
-            .endscreen-grid { grid-template-columns: 1fr; gap: 14px; }
-            .endscreen-title { font-size: 1.1rem; margin-bottom: 14px; }
-        }
+/* TEXT GLOW */
+.embed-video-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    text-shadow: 0 2px 20px rgba(0,0,0,0.8);
+}
 
-        .endscreen-card {
-            display: flex;
-            gap: 14px;
-            background: rgba(255, 255, 255, 0.04);
-            padding: 10px;
-            border-radius: 12px;
-            text-decoration: none;
-            color: inherit;
-            align-items: center;
-            border: 1px solid rgba(255,255,255,0.02);
-            transition: background 0.2s ease, transform 0.2s ease;
-        }
-        .endscreen-card:hover { 
-            background: rgba(255, 255, 255, 0.12);
-            transform: translateY(-2px);
-        }
+.embed-channel-name {
+    color: var(--text-secondary);
+}
 
-        .endscreen-thumb-container {
-            position: relative;
-            width: 130px;
-            height: 74px;
-            flex-shrink: 0;
-            border-radius: 6px;
-            overflow: hidden;
-            background: #111;
-        }
-        .endscreen-thumb-container img { width: 100%; height: 100%; object-fit: cover; }
+/* =========================
+   GLASS BUTTONS
+========================= */
+.embed-icon-btn {
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: var(--blur-strong);
+    -webkit-backdrop-filter: var(--blur-strong);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 10px;
+    transition: 0.25s ease;
+    box-shadow: var(--inner-glow);
+}
 
-        .endscreen-duration {
-            position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,0.85);
-            color: #fff; padding: 2px 4px; border-radius: 3px; font-size: 0.68rem; font-weight: 600;
-        }
+.embed-icon-btn:hover {
+    background: rgba(255,255,255,0.12);
+    transform: translateY(-2px) scale(1.03);
+}
 
-        .endscreen-meta { display: flex; flex-direction: column; min-width: 0; }
-        .endscreen-v-title {
-            font-size: 0.88rem; font-weight: 500; line-height: 1.35; color: var(--text-primary);
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 4px;
-        }
-        .endscreen-v-creator { font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* =========================
+   END SCREEN GLASS WALL
+========================= */
+.player-endscreen-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10,10,15,0.55);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 12;
+}
 
-        .video-js .vjs-big-play-button {
-            background-color: rgba(20, 20, 20, 0.85) !important; border: none !important; border-radius: 12px !important;
-            width: 68px !important; height: 48px !important; line-height: 48px !important; margin-top: -24px !important; margin-left: -34px !important; z-index: 11;
-        }
-        .video-js:hover .vjs-big-play-button { background-color: var(--accent-primary) !important; }
-        .video-js .vjs-control-bar { display: flex !important; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%) !important; height: 48px !important; z-index: 11; }
-        .video-js .vjs-progress-control { position: absolute !important; width: calc(100% - 24px) !important; height: 6px !important; top: -6px !important; left: 12px !important; display: flex !important; visibility: visible !important;}
-        .video-js .vjs-play-progress { background: var(--accent-primary) !important; }
-        .video-js .vjs-slider { background-color: rgba(255,255,255,0.2) !important; }
-        
-        .video-js .vjs-fullscreen-control { display: none !important; }
-        
-        .vjs-download-control, .vjs-custom-fullscreen-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
-        .vjs-download-control svg, .vjs-custom-fullscreen-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; }
-        .vjs-download-control svg:hover, .vjs-custom-fullscreen-control svg:hover { opacity: 1; }
+/* TITLE FLOAT */
+.endscreen-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 25px rgba(255,255,255,0.08);
+}
 
-        .video-js .vjs-loading-spinner {
-            border: 3px solid rgba(255, 255, 255, 0.1) !important;
-            border-top: 3px solid var(--accent-primary) !important;
-            border-radius: 50% !important;
-            width: 50px !important;
-            height: 50px !important;
-            margin: -25px 0 0 -25px !important;
-            animation: vjs-spinner-spin 0.8s linear infinite !important;
-            background: none !important;
-        }
-        .video-js .vjs-loading-spinner:before, 
-        .video-js .vjs-loading-spinner:after {
-            display: none !important;
-        }
-        @keyframes vjs-spinner-spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
+/* GRID FLOATING PANELS */
+.endscreen-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+    max-width: 780px;
+    width: 100%;
+}
+
+/* GLASS CARDS (HEAVY) */
+.endscreen-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 18px;
+
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: var(--blur-ultra);
+    -webkit-backdrop-filter: var(--blur-ultra);
+
+    border: 1px solid rgba(255,255,255,0.14);
+
+    box-shadow:
+        0 15px 40px rgba(0,0,0,0.6),
+        inset 0 1px 0 rgba(255,255,255,0.18);
+
+    transition: 0.3s ease;
+}
+
+.endscreen-card:hover {
+    transform: translateY(-6px) scale(1.01);
+    background: rgba(255,255,255,0.1);
+}
+
+/* THUMB GLASS FRAME */
+.endscreen-thumb-container {
+    width: 132px;
+    height: 76px;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
+}
+
+/* DURATION PILL */
+.endscreen-duration {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    font-size: 0.7rem;
+
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 2px 6px;
+    border-radius: 999px;
+}
+
+/* =========================
+   PLAYER CONTROLS GLASS
+========================= */
+.video-js .vjs-control-bar {
+    background: rgba(255,255,255,0.04) !important;
+    backdrop-filter: var(--blur-ultra);
+    -webkit-backdrop-filter: var(--blur-ultra);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    box-shadow: var(--shadow-glass);
+}
+
+.video-js .vjs-progress-control {
+    height: 6px !important;
+}
+
+.video-js .vjs-play-progress {
+    background: var(--accent-primary) !important;
+    box-shadow: 0 0 12px var(--accent-primary);
+}
+
+/* BIG PLAY BUTTON = FLOATING GLASS ORB */
+.video-js .vjs-big-play-button {
+    background: rgba(255,255,255,0.06) !important;
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.18) !important;
+    border-radius: 16px !important;
+    box-shadow: var(--shadow-glass), var(--inner-glow);
+}
+
+/* LOADER ULTRA GLASS */
+.video-js .vjs-loading-spinner {
+    border: 3px solid rgba(255,255,255,0.1) !important;
+    border-top: 3px solid rgba(255,80,80,0.9) !important;
+    backdrop-filter: blur(20px);
+    width: 52px !important;
+    height: 52px !important;
+    border-radius: 50%;
+}
+</style>
 </head>
 <body>
 
