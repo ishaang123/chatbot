@@ -156,7 +156,7 @@ PLAYER_TEMPLATE = """
         .embed-meta-text { display: flex; flex-direction: column; min-width: 0; }
         .embed-video-title { color: var(--text-primary); font-size: 1.1rem; font-weight: 500; margin: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
         .embed-channel-name { color: var(--text-secondary); font-size: 0.85rem; margin-top: 2px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-        
+         
         .embed-icon-btn {
             background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 8px;
             filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); pointer-events: auto;
@@ -388,7 +388,7 @@ PLAYER_TEMPLATE = """
                 fluid: false, 
                 playsinline: true, 
                 webkitPlaysinline: true,
-                preferFullWindow: true, // Forces layout full-window rendering over iOS native layout hijack
+                preferFullWindow: false, // Core change: allows native mobile interface breakout protocols
                 controlBar: {
                     progressControl: { enableTouchPoints: true }
                 }
@@ -423,19 +423,31 @@ PLAYER_TEMPLATE = """
                 downloadBtn.addEventListener('click', function() { window.open(decodedUrl, '_blank'); });
                 controlBar.el().appendChild(downloadBtn);
 
-                // 2. TRUE MOBILE COMPATIBLE HARDWARE FULLSCREEN
+                // 2. TRUE MOBILE COMPATIBLE HARDWARE FULLSCREEN WITH IOS BROKEN-API BYPASS
                 const fsBtn = document.createElement('div');
                 fsBtn.className = 'vjs-custom-fullscreen-control vjs-control vjs-button';
                 fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
                 
                 fsBtn.addEventListener('click', function() {
+                    const videoEl = player.tech({ IWillNotUseThisInPlugins: true }).el(); // Captures deep browser webkit media instances
+
                     if (!player.isFullscreen()) {
-                        player.requestFullscreen();
+                        if (videoEl.webkitEnterFullscreen) {
+                            videoEl.webkitEnterFullscreen(); // Direct target hijack for iOS layout containment
+                        } else {
+                            player.requestFullscreen(); // W3C engine standards layout for desktop/Android ecosystem
+                        }
+
                         if (screen.orientation && screen.orientation.lock) {
                             screen.orientation.lock('landscape').catch(() => {});
                         }
                     } else {
-                        player.exitFullscreen();
+                        if (videoEl.webkitExitFullscreen) {
+                            videoEl.webkitExitFullscreen();
+                        } else {
+                            player.exitFullscreen();
+                        }
+
                         if (screen.orientation && screen.orientation.unlock) {
                             screen.orientation.unlock();
                         }
