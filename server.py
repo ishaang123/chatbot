@@ -122,7 +122,6 @@ PLAYER_TEMPLATE = """
             background-color: #000 !important;
         }
 
-        /* Fixed aspect ratio behavior: Scales up to maximum screen bounds without stretching */
         .video-js video { 
             object-fit: contain !important; 
             width: 100% !important;
@@ -147,7 +146,17 @@ PLAYER_TEMPLATE = """
             transition: opacity 0.25s ease;
         }
 
-        .vjs-has-started.vjs-user-inactive .embed-floating-header { opacity: 0; }
+        /* HUD visibility maps cleanly to Video.js internal player state engine */
+        .video-js.vjs-user-inactive ~ #embed-header { 
+            opacity: 0; 
+            pointer-events: none;
+        }
+        .video-js.vjs-user-active ~ #embed-header,
+        .video-js.vjs-paused ~ #embed-header { 
+            opacity: 1; 
+            pointer-events: auto;
+        }
+
         .embed-header-left { display: flex; align-items: center; gap: 12px; pointer-events: auto; min-width: 0; }
 
         .embed-channel-icon-container {
@@ -273,12 +282,34 @@ PLAYER_TEMPLATE = """
         .vjs-download-control, .vjs-custom-fullscreen-control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; order: 99; }
         .vjs-download-control svg, .vjs-custom-fullscreen-control svg { width: 18px; height: 18px; fill: var(--text-primary); opacity: 0.8; }
         .vjs-download-control svg:hover, .vjs-custom-fullscreen-control svg:hover { opacity: 1; }
+
+        /* --- MODERN MINIMALIST GLOW LOADER ENGINE --- */
+        .video-js .vjs-loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1) !important;
+            border-top: 3px solid var(--accent-primary) !important;
+            border-radius: 50% !important;
+            width: 50px !important;
+            height: 50px !important;
+            margin: -25px 0 0 -25px !important;
+            animation: vjs-spinner-spin 0.8s linear infinite !important;
+            background: none !important;
+        }
+        .video-js .vjs-loading-spinner:before, 
+        .video-js .vjs-loading-spinner:after {
+            display: none !important;
+        }
+        @keyframes vjs-spinner-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
 
     <div class="viewport-player-hero" id="player-view-wrapper">
         
+        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline></video>
+
         <div class="embed-floating-header" id="embed-header">
             <div class="embed-header-left">
                 <div class="embed-channel-icon-container" id="avatar-container-hud"></div>
@@ -298,8 +329,6 @@ PLAYER_TEMPLATE = """
             <div class="endscreen-title">Up Next</div>
             <div class="endscreen-grid" id="endscreen-grid-items"></div>
         </div>
-
-        <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline></video>
         
     </div>
 
@@ -408,40 +437,25 @@ PLAYER_TEMPLATE = """
                 downloadBtn.addEventListener('click', function() { window.open(decodedUrl, '_blank'); });
                 controlBar.el().appendChild(downloadBtn);
 
-                // 2. TRUE HARDWARE FULLSCREEN INJECTION
+                // 2. TRUE MOBILE COMPATIBLE HARDWARE FULLSCREEN
                 const fsBtn = document.createElement('div');
                 fsBtn.className = 'vjs-custom-fullscreen-control vjs-control vjs-button';
                 fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
                 
                 fsBtn.addEventListener('click', function() {
-                    const wrapper = document.getElementById('player-view-wrapper');
-                    const isCurrentlyFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
-                    
-                    if (!isCurrentlyFS) {
-                        if (wrapper.requestFullscreen) {
-                            wrapper.requestFullscreen();
-                        } else if (wrapper.webkitRequestFullscreen) {
-                            wrapper.webkitRequestFullscreen();
-                        } else if (wrapper.msRequestFullscreen) {
-                            wrapper.msRequestFullscreen();
+                    if (!player.isFullscreen()) {
+                        player.requestFullscreen();
+                        if (screen.orientation && screen.orientation.lock) {
+                            screen.orientation.lock('landscape').catch(() => {});
                         }
                     } else {
-                        if (document.exitFullscreen) {
-                            document.exitFullscreen();
-                        } else if (document.webkitExitFullscreen) {
-                            document.webkitExitFullscreen();
-                        } else if (document.msExitFullscreen) {
-                            document.msExitFullscreen();
+                        player.exitFullscreen();
+                        if (screen.orientation && screen.orientation.unlock) {
+                            screen.orientation.unlock();
                         }
                     }
                 });
                 controlBar.el().appendChild(fsBtn);
-            });
-
-            window.addEventListener('resize', function() {
-                if(player.updateDisplayOpacity) {
-                    player.updateDisplayOpacity();
-                }
             });
 
             document.getElementById('embed-share-btn').addEventListener('click', function() {
