@@ -1,4 +1,4 @@
-name: Deploy to PythonAnywhere
+name: Deploy to PythonAnywhere!
 
 on:
   push:
