@@ -488,29 +488,22 @@ def render_player():
     else:
         target_url = f"https://www.dailymotion.com/video/{clean_video_id}"
 
-    # --- LAYERED ANTI-401 UNAUTHORIZED WORKAROUND ENGINE ---
+    # --- UPDATED STABLE EXTRACTION ENGINE OPTIONS ---
     ydl_opts = {
-        # 🔥 FIX 1: Filter out fragmented mp4 layers completely so it targets clean .ts streams from the extraction layer
-        'format': 'best[vcodec^=h264][acodec^=aac]/best', 
+        # Fix 1: Accept all adaptive stream layouts safely without strict codecs filtering limits
+        'format': 'best', 
         'quiet': True,
         'no_warnings': True,
         'skip_download': True,              
         'check_formats': 'cached',          
         'extract_flat': False,
-        'socket_timeout': 5,
+        'socket_timeout': 10,  # Bumped to handle slower handshakes
         'nocheckcertificate': True,
         'geo_bypass': True,  
-        'impersonate': ImpersonateTarget.from_str('chrome'),
+        # Fix 2: Drop the restrictive Chrome string and let yt-dlp alternate signatures naturally
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
-            'Sec-Fetch-Mode': 'navigate',
-        },
-        'extractor_args': {
-            'dailymotion': {
-                'pubkey': ['default'] 
-            }
         }
     }
 
@@ -521,11 +514,15 @@ def render_player():
                 return "Extraction failed.", 500
                 
             formats = info.get('formats', [])
+            
+            # Fix 3: Robust fallback resolution extraction sorting
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
-            m3u8_url = hls_streams[-1].get('url') if hls_streams else info.get('url')
-
-            if not m3u8_url and formats:
-                m3u8_url = formats[-1].get('url')
+            
+            # Select the most reliable direct stream target
+            if hls_streams:
+                m3u8_url = hls_streams[-1].get('url')
+            else:
+                m3u8_url = info.get('url') or (formats[-1].get('url') if formats else None)
 
             if not m3u8_url:
                 return "No playable stream paths found.", 404
@@ -563,7 +560,7 @@ def proxy_m3u8():
     }
     
     try:
-        resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=4)
+        resp = http_pool.get(raw_m3u8_url, headers=headers, timeout=5)
     except Exception:
         return "Timeout during proxy resolution", 504
 
@@ -612,12 +609,11 @@ def proxy_ts_segment():
         'Accept': '*/*',
         'Connection': 'keep-alive'
     }
-    timeout_val = 4 if priority == "high" else 6
+    timeout_val = 5 if priority == "high" else 7
     
     try:
         req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
         
-        # 🔥 FIX 2: Dynamically detect the incoming segment mimetype instead of forcing video/MP2T
         content_type = req.headers.get('Content-Type')
         if not content_type or content_type == 'text/plain':
             if '.mp4' in raw_ts_url or '/fmp4/' in raw_ts_url:
