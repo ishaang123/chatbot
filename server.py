@@ -580,7 +580,7 @@ def proxy_m3u8():
     rewritten_lines = []
     
     # 🚀 CONFIGURATION: Path to your 2-second direct .ts bumper logo file
-    BUMPER_TS_URL = "https://chatbot-7pg0.onrender.com/assets/logo_bumper.ts"
+    BUMPER_TS_URL = "assets/logo_bumper.ts"
     bumper_injected = False
 
     for line in resp.text.splitlines():
@@ -636,6 +636,10 @@ def proxy_ts_segment():
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     
+    # 🚀 LOCAL INTERCEPT FIX: Bypass the web request loop entirely if it's your bumper file
+    if "logo_bumper.ts" in raw_ts_url:
+        return serve_bumper()
+
     # Mirror matching engine profiles so Dailymotion connection tracks don't close
     headers = {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
