@@ -492,6 +492,7 @@ def render_player():
     else:
         target_url = f"https://www.dailymotion.com/video/{clean_video_id}"
 
+    # --- LAYERED ANTI-401 UNAUTHORIZED WORKAROUND ENGINE ---
     ydl_opts = {
         'format': 'best/any', 
         'quiet': True,
@@ -499,8 +500,27 @@ def render_player():
         'skip_download': True,              
         'check_formats': 'cached',          
         'extract_flat': False,
+        'socket_timeout': 5,
+        'nocheckcertificate': True,
+        'geo_bypass': True,  # Bypasses IP blocks targeting hosting infrastructure
+        
+        # Layer 1: Emulate real client browser TLS fingerprints
         'impersonate': ImpersonateTarget.from_str('chrome'),
-        'socket_timeout': 5
+        
+        # Layer 2: Explicit structural request headers to match Layer 1 properties
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Sec-Fetch-Mode': 'navigate',
+        },
+        
+        # Layer 3: Force yt-dlp native extraction fallback arguments over breaking HTML scrapers
+        'extractor_args': {
+            'dailymotion': {
+                'pubkey': ['default']  # Directs parsing engine onto signed player keys if web scraper falls behind
+            }
+        }
     }
 
     try:
