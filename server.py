@@ -578,11 +578,31 @@ def proxy_m3u8():
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
     rewritten_lines = []
+    
+    # 🚀 CONFIGURATION: Path to your 2-second direct .ts bumper logo file
+    BUMPER_TS_URL = ""
+    bumper_injected = False
 
     for line in resp.text.splitlines():
         line_stripped = line.strip()
         if not line_stripped:
             continue
+
+        # Detect the layout structure header of the stream
+        if line_stripped.startswith('#EXTM3U'):
+            rewritten_lines.append(line_stripped)
+            continue
+
+        # --- THE PLAYLIST INJECTION ENGINE ---
+        # We look for the very first video segment indicator to sneak our logo in front of it
+        if (line_stripped.startswith('#EXTINF') or not line_stripped.startswith('#')) and not bumper_injected:
+            # Only inject this on the media chunk playlists, not the master resolution index list
+            if ".m3u8" not in resp.text: 
+                rewritten_lines.append("#EXT-X-DISCONTINUITY")
+                rewritten_lines.append("#EXTINF:2.000,")  # Tells the player your logo clip is exactly 2.0 seconds long
+                rewritten_lines.append(f"/segment?url={urllib.parse.quote_plus(BUMPER_TS_URL)}&priority={priority}")
+                rewritten_lines.append("#EXT-X-DISCONTINUITY")
+                bumper_injected = True
 
         if 'URI=' in line_stripped:
             def replace_uri(match):
@@ -603,7 +623,6 @@ def proxy_m3u8():
         else:
             rewritten_lines.append(line_stripped)
 
-    # CRITICAL: Use correct Apple HTTP Live Streaming Content Type
     response = Response("\n".join(rewritten_lines), content_type="application/vnd.apple.mpegurl")
     response.headers["Cache-Control"] = "public, max-age=2"
     return response
@@ -647,7 +666,10 @@ def proxy_ts_segment():
         return response
     except Exception:
         return "Segment connection dropped", 502
-
+@app.route('/assets/logo_bumper.ts')
+def serve_bumper():
+    # Looks for the file right next to your server script
+    return send_from_file(os.getcwd(), 'logo_bumper.ts', mimetype='video/MP2T')
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, threaded=True)
