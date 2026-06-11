@@ -428,15 +428,12 @@ PLAYER_TEMPLATE = """
                 fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
                 
                 fsBtn.addEventListener('click', function() {
-                    // Pull direct baseline DOM node created by the video layer engine
                     const videoEl = document.getElementById('my-video_html5_api') || player.tech({ IWillNotUseThisInPlugins: true }).el();
 
                     if (videoEl) {
-                        // Direct iOS Safari Pipeline execution
                         if (videoEl.webkitEnterFullscreen) {
                             videoEl.webkitEnterFullscreen();
                         } 
-                        // Direct Android Chrome / Standard W3C execution
                         else if (videoEl.requestFullscreen) {
                             videoEl.requestFullscreen();
                         } else if (videoEl.msRequestFullscreen) {
@@ -447,7 +444,6 @@ PLAYER_TEMPLATE = """
                             player.requestFullscreen();
                         }
 
-                        // Force rotation configuration lock if ecosystem supports it
                         if (screen.orientation && screen.orientation.lock) {
                             screen.orientation.lock('landscape').catch(() => {});
                         }
@@ -494,7 +490,8 @@ def render_player():
 
     # --- LAYERED ANTI-401 UNAUTHORIZED WORKAROUND ENGINE ---
     ydl_opts = {
-        'format': 'best/any', 
+        # 🔥 FIX 1: Filter out fragmented mp4 layers completely so it targets clean .ts streams from the extraction layer
+        'format': 'best[vcodec^=h264][acodec^=aac]/best', 
         'quiet': True,
         'no_warnings': True,
         'skip_download': True,              
@@ -502,23 +499,17 @@ def render_player():
         'extract_flat': False,
         'socket_timeout': 5,
         'nocheckcertificate': True,
-        'geo_bypass': True,  # Bypasses IP blocks targeting hosting infrastructure
-        
-        # Layer 1: Emulate real client browser TLS fingerprints
+        'geo_bypass': True,  
         'impersonate': ImpersonateTarget.from_str('chrome'),
-        
-        # Layer 2: Explicit structural request headers to match Layer 1 properties
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
             'Sec-Fetch-Mode': 'navigate',
         },
-        
-        # Layer 3: Force yt-dlp native extraction fallback arguments over breaking HTML scrapers
         'extractor_args': {
             'dailymotion': {
-                'pubkey': ['default']  # Directs parsing engine onto signed player keys if web scraper falls behind
+                'pubkey': ['default'] 
             }
         }
     }
@@ -603,7 +594,6 @@ def proxy_m3u8():
         else:
             rewritten_lines.append(line_stripped)
 
-    # CRITICAL: Use correct Apple HTTP Live Streaming Content Type
     response = Response("\n".join(rewritten_lines), content_type="application/vnd.apple.mpegurl")
     response.headers["Cache-Control"] = "public, max-age=2"
     return response
@@ -617,7 +607,6 @@ def proxy_ts_segment():
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     
-    # Mirror matching engine profiles so Dailymotion connection tracks don't close
     headers = {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
         'Accept': '*/*',
@@ -627,13 +616,18 @@ def proxy_ts_segment():
     
     try:
         req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
-        content_type = req.headers.get('Content-Type', 'video/MP2T')
         
-        # Pull original length so client native seekers can compute byte range offsets instantly
+        # 🔥 FIX 2: Dynamically detect the incoming segment mimetype instead of forcing video/MP2T
+        content_type = req.headers.get('Content-Type')
+        if not content_type or content_type == 'text/plain':
+            if '.mp4' in raw_ts_url or '/fmp4/' in raw_ts_url:
+                content_type = 'video/mp4'
+            else:
+                content_type = 'video/MP2T'
+        
         content_length = req.headers.get('Content-Length')
 
         def stream_ts_data():
-            # Drop block size to 16KB for zero pipeline lag when fast forwarding
             for block in req.iter_content(chunk_size=1024 * 16):
                 if block:
                     yield block
@@ -642,7 +636,6 @@ def proxy_ts_segment():
         if content_length:
             response.headers['Content-Length'] = content_length
             
-        # Keep aggressive edge caching for instant segment re-reads when seeking backwards
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
     except Exception:
