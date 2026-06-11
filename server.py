@@ -5,8 +5,8 @@ import threading
 import time
 import urllib.parse
 import requests
+from flask import Flask, request, Response, render_template_string 
 import yt_dlp
-from flask import Flask, request, Response, render_template_string, send_from_directory
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
@@ -578,31 +578,11 @@ def proxy_m3u8():
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
     rewritten_lines = []
-    
-    # 🚀 CONFIGURATION: Path to your 2-second direct .ts bumper logo file
-    BUMPER_TS_URL = "assets/logo_bumper.ts"
-    bumper_injected = False
 
     for line in resp.text.splitlines():
         line_stripped = line.strip()
         if not line_stripped:
             continue
-
-        # Detect the layout structure header of the stream
-        if line_stripped.startswith('#EXTM3U'):
-            rewritten_lines.append(line_stripped)
-            continue
-
-        # --- THE PLAYLIST INJECTION ENGINE ---
-        # We look for the very first video segment indicator to sneak our logo in front of it
-        if (line_stripped.startswith('#EXTINF') or not line_stripped.startswith('#')) and not bumper_injected:
-            # Only inject this on the media chunk playlists, not the master resolution index list
-            if ".m3u8" not in resp.text: 
-                rewritten_lines.append("#EXT-X-DISCONTINUITY")
-                rewritten_lines.append("#EXTINF:2.000,")  # Tells the player your logo clip is exactly 2.0 seconds long
-                rewritten_lines.append(f"/segment?url={urllib.parse.quote_plus(BUMPER_TS_URL)}&priority={priority}")
-                rewritten_lines.append("#EXT-X-DISCONTINUITY")
-                bumper_injected = True
 
         if 'URI=' in line_stripped:
             def replace_uri(match):
@@ -623,6 +603,7 @@ def proxy_m3u8():
         else:
             rewritten_lines.append(line_stripped)
 
+    # CRITICAL: Use correct Apple HTTP Live Streaming Content Type
     response = Response("\n".join(rewritten_lines), content_type="application/vnd.apple.mpegurl")
     response.headers["Cache-Control"] = "public, max-age=2"
     return response
@@ -636,10 +617,6 @@ def proxy_ts_segment():
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     
-    # 🚀 LOCAL INTERCEPT FIX: Bypass the web request loop entirely if it's your bumper file
-    if "logo_bumper.ts" in raw_ts_url:
-        return serve_bumper()
-
     # Mirror matching engine profiles so Dailymotion connection tracks don't close
     headers = {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
@@ -670,10 +647,7 @@ def proxy_ts_segment():
         return response
     except Exception:
         return "Segment connection dropped", 502
-@app.route('/assets/logo_bumper.ts')
-def serve_bumper():
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    return send_from_directory(current_dir, 'logo_bumper.ts', mimetype='video/MP2T')
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, threaded=True)
