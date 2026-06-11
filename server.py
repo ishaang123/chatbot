@@ -580,7 +580,7 @@ def proxy_m3u8():
     rewritten_lines = []
     
     # 🚀 CONFIGURATION: Path to your 2-second direct .ts bumper logo file
-    BUMPER_TS_URL = ""
+    BUMPER_TS_URL = "https://chatbot-7pg0.onrender.com/assets/logo_bumper.ts"
     bumper_injected = False
 
     for line in resp.text.splitlines():
