@@ -6,7 +6,7 @@ import time
 import urllib.parse
 import requests
 import yt_dlp
-from flask import Flask, request, Response, render_template_string
+from flask import Flask, request, Response, render_template_string, send_from_directory
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
 app = Flask(__name__)
