@@ -668,8 +668,8 @@ def proxy_ts_segment():
         return "Segment connection dropped", 502
 @app.route('/assets/logo_bumper.ts')
 def serve_bumper():
-    # Looks for the file right next to your server script
-    return send_from_file(os.getcwd(), 'logo_bumper.ts', mimetype='video/MP2T')
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return send_from_directory(current_dir, 'logo_bumper.ts', mimetype='video/MP2T')
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, threaded=True)
