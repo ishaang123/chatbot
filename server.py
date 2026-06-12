@@ -547,19 +547,18 @@ def render_player():
     else:
         target_url = f"https://www.dailymotion.com/video/{clean_video_id}"
 
-    # --- UPDATED STABLE EXTRACTION ENGINE OPTIONS ---
+    # --- 🛠️ FIXED EXTRACTION CONFIGURATION ENGINE ---
     ydl_opts = {
-        # Fix 1: Accept all adaptive stream layouts safely without strict codecs filtering limits
-        'format': 'best', 
+        # Changed 'best' to a permissive query selector fallback sequence
+        'format': 'bestvideo+bestaudio/best', 
         'quiet': True,
         'no_warnings': True,
         'skip_download': True,              
         'check_formats': 'cached',          
         'extract_flat': False,
-        'socket_timeout': 10,  # Bumped to handle slower handshakes
+        'socket_timeout': 10,  
         'nocheckcertificate': True,
         'geo_bypass': True,  
-        # Fix 2: Drop the restrictive Chrome string and let yt-dlp alternate signatures naturally
         'http_headers': {
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
@@ -574,7 +573,7 @@ def render_player():
                 
             formats = info.get('formats', [])
             
-            # Fix 3: Robust fallback resolution extraction sorting
+            # Robust fallback resolution extraction sorting
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
             
             # Select the most reliable direct stream target
@@ -604,7 +603,6 @@ def render_player():
             
     except Exception as error:
         return f"Extraction Pipeline Exception Error: {str(error)}", 500
-
 @app.route('/manifest')
 def proxy_m3u8():
     raw_m3u8_url = request.args.get('url')
