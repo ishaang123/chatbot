@@ -425,20 +425,33 @@ PLAYER_TEMPLATE = """
 
         document.addEventListener("DOMContentLoaded", function() {
             resolveMediaAssets();
-
             const player = videojs('my-video', {
-                preload: 'auto',
-                autoplay: false, 
-                controls: true,
-                fluid: false, 
-                playsinline: true, 
-                webkitPlaysinline: true,
-                preferFullWindow: false, 
-                controlBar: {
-                    progressControl: { enableTouchPoints: true }
-                }
-            });
-
+    preload: 'auto', 
+    autoplay: false, 
+    controls: true,
+    fluid: false, 
+    playsinline: true, 
+    webkitPlaysinline: true,
+    preferFullWindow: false, 
+    
+    // 🛠️ FIX: STRICTLY LIMIT BANDWIDTH & BUFFERING AHEAD
+    html5: {
+        vhs: {
+            // Maximum seconds of video to buffer ahead. 
+            // Setting this to 12 means it will NEVER download more than 12 seconds ahead of the user.
+            maxBufferLength: 12,
+            
+            // The buffer target it tries to maintain.
+            forwardBufferLength: 6,
+            
+            // Prevents the browser from greedily caching old parts of the video
+            backBufferLength: 0
+        }
+    },
+    controlBar: {
+        progressControl: { enableTouchPoints: true }
+    }
+});
             player.src({
                 src: "/manifest?url={{ stream_url | urlencode }}&priority={{ priority }}",
                 type: 'application/x-mpegURL',
