@@ -278,9 +278,47 @@ PLAYER_TEMPLATE = """
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* 🚀 NEW CRITICAL INTERSTITIAL LOAD UI STYLES */
+        .nebula-interstitial-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--bg-base);
+            z-index: 99999; /* Force layout overlay superiority over video layers */
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .loader-ring {
+            width: 54px;
+            height: 54px;
+            border: 4px solid rgba(255, 255, 255, 0.08);
+            border-top: 4px solid var(--accent-primary);
+            border-radius: 50%;
+            animation: vjs-spinner-spin 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        .loader-text {
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            opacity: 0.85;
+        }
     </style>
 </head>
 <body>
+
+    <div class="nebula-interstitial-loader" id="page-interstitial-screen">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Extracting High Priority Stream...</div>
+    </div>
 
     <div class="viewport-player-hero" id="player-view-wrapper">
         
@@ -344,7 +382,7 @@ PLAYER_TEMPLATE = """
         async function runLazyEndscreenGeneration() {
             if(!targetVideoId) return;
             try {
-                const response = await fetch(`https://api.dailymotion.com/video/${targetVideoId}/related?fields=id,title,owner.username,thumbnail_240_url,duration&limit=4`);
+                const response = await fetch(`https://api.dailymotion.com/video/${targetVideoId}/related?fields=id,title,owner,thumbnail_240_url,duration&limit=4`);
                 const data = await response.json();
                 if(data && data.list) {
                     const gridContainer = document.getElementById('endscreen-grid-items');
@@ -353,6 +391,8 @@ PLAYER_TEMPLATE = """
                     data.list.forEach(item => {
                         const mins = Math.floor(item.duration / 60);
                         const secs = String(item.duration % 60).padStart(2, '0');
+                        
+                        const uploaderUsername = (item.owner && item.owner.username) ? item.owner.username : 'Creator';
                         
                         const element = document.createElement('a');
                         element.className = 'endscreen-card';
@@ -364,9 +404,15 @@ PLAYER_TEMPLATE = """
                             </div>
                             <div class="endscreen-meta">
                                 <div class="endscreen-v-title">${item.title}</div>
-                                <div class="endscreen-v-creator">${item['owner.username'] || 'Creator'}</div>
+                                <div class="endscreen-v-creator">${uploaderUsername}</div>
                             </div>
                         `;
+
+                        // 🧠 FIX ENGINE: Capture clicks and trigger instant viewport overlay block before browser starts document unload 
+                        element.addEventListener('click', function() {
+                            document.getElementById('page-interstitial-screen').style.display = 'flex';
+                        });
+
                         gridContainer.appendChild(element);
                     });
                     
