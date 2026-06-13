@@ -279,7 +279,6 @@ PLAYER_TEMPLATE = """
             100% { transform: rotate(360deg); }
         }
 
-        /* 🚀 NEW CRITICAL INTERSTITIAL LOAD UI STYLES */
         .nebula-interstitial-loader {
             position: fixed;
             top: 0;
@@ -287,7 +286,7 @@ PLAYER_TEMPLATE = """
             width: 100vw;
             height: 100vh;
             background-color: var(--bg-base);
-            z-index: 99999; /* Force layout overlay superiority over video layers */
+            z-index: 99999; 
             display: none;
             flex-direction: column;
             justify-content: center;
@@ -311,6 +310,123 @@ PLAYER_TEMPLATE = """
             letter-spacing: 0.5px;
             opacity: 0.85;
         }
+
+        /* 👤 ANIMATED CREATOR VIDEOS MODAL STYLES */
+        .creator-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(5, 5, 6, 0.96);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 100000; 
+            display: none;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .creator-modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .creator-modal-content {
+            background: #121214;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            width: 90%;
+            max-width: 760px;
+            height: 75vh;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transform: scale(0.92);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .creator-modal-overlay.active .creator-modal-content {
+            transform: scale(1);
+        }
+
+        .creator-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .creator-modal-profile {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .creator-modal-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            overflow: hidden;
+            background: #272727;
+        }
+
+        .creator-modal-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .creator-modal-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .creator-modal-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .creator-close-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            color: #fff;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .creator-close-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .creator-video-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .creator-video-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        @media (max-width: 560px) {
+            .creator-video-grid { grid-template-columns: 1fr; gap: 12px; }
+            .creator-modal-content { height: 85vh; width: 95%; }
+            .creator-video-body { padding: 16px; }
+        }
     </style>
 </head>
 <body>
@@ -325,7 +441,7 @@ PLAYER_TEMPLATE = """
         <video id="my-video" class="video-js vjs-default-skin vjs-big-play-centered" controls playsinline webkit-playsinline></video>
 
         <div class="embed-floating-header" id="embed-header">
-            <div class="embed-header-left">
+            <div class="embed-header-left" id="creator-hud-trigger" style="cursor: pointer; pointer-events: auto;">
                 <div class="embed-channel-icon-container" id="avatar-container-hud"></div>
                 <div class="embed-meta-text">
                     <span class="embed-video-title">{{ title }}</span>
@@ -346,9 +462,32 @@ PLAYER_TEMPLATE = """
         
     </div>
 
+    <div class="creator-modal-overlay" id="creator-profile-modal">
+        <div class="creator-modal-content">
+            <div class="creator-modal-header">
+                <div class="creator-modal-profile">
+                    <div class="creator-modal-avatar" id="modal-avatar-slot"></div>
+                    <div>
+                        <h3 class="creator-modal-title" id="modal-creator-title">Creator Profile</h3>
+                        <div class="creator-modal-subtitle">More uploads from this station</div>
+                    </div>
+                </div>
+                <button class="creator-close-btn" id="modal-close-trigger">
+                    <svg style="width:20px;height:20px;fill:currentColor" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+            </div>
+            <div class="creator-video-body">
+                <div class="creator-video-grid" id="modal-grid-items">
+                    <div style="color:var(--text-secondary);grid-column:1/-1;text-align:center;padding:20px;">Gathering content data index metadata...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
     <script>
         const targetVideoId = "{{ current_video_id }}";
+        let player;
 
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
@@ -408,7 +547,6 @@ PLAYER_TEMPLATE = """
                             </div>
                         `;
 
-                        // 🧠 FIX ENGINE: Capture clicks and trigger instant viewport overlay block before browser starts document unload 
                         element.addEventListener('click', function() {
                             document.getElementById('page-interstitial-screen').style.display = 'flex';
                         });
@@ -425,33 +563,27 @@ PLAYER_TEMPLATE = """
 
         document.addEventListener("DOMContentLoaded", function() {
             resolveMediaAssets();
-            const player = videojs('my-video', {
-    preload: 'auto', 
-    autoplay: false, 
-    controls: true,
-    fluid: false, 
-    playsinline: true, 
-    webkitPlaysinline: true,
-    preferFullWindow: false, 
-    
-    // 🛠️ FIX: STRICTLY LIMIT BANDWIDTH & BUFFERING AHEAD
-    html5: {
-        vhs: {
-            // Maximum seconds of video to buffer ahead. 
-            // Setting this to 12 means it will NEVER download more than 12 seconds ahead of the user.
-            maxBufferLength: 12,
-            
-            // The buffer target it tries to maintain.
-            forwardBufferLength: 6,
-            
-            // Prevents the browser from greedily caching old parts of the video
-            backBufferLength: 0
-        }
-    },
-    controlBar: {
-        progressControl: { enableTouchPoints: true }
-    }
-});
+            player = videojs('my-video', {
+                preload: 'auto', 
+                autoplay: false, 
+                controls: true,
+                fluid: false, 
+                playsinline: true, 
+                webkitPlaysinline: true,
+                preferFullWindow: false, 
+                
+                html5: {
+                    vhs: {
+                        maxBufferLength: 12,
+                        forwardBufferLength: 6,
+                        backBufferLength: 0
+                    }
+                },
+                controlBar: {
+                    progressControl: { enableTouchPoints: true }
+                }
+            });
+
             player.src({
                 src: "/manifest?url={{ stream_url | urlencode }}&priority={{ priority }}",
                 type: 'application/x-mpegURL',
@@ -519,6 +651,99 @@ PLAYER_TEMPLATE = """
                     alert("Link copied to clipboard memory.");
                 }
             });
+
+            // --- 👤 CREATOR POPUP CONTROLLER LOGIC ENGINE ---
+            const creatorTrigger = document.getElementById('creator-hud-trigger');
+            const modalOverlay = document.getElementById('creator-profile-modal');
+            const modalClose = document.getElementById('modal-close-trigger');
+            let hasLoadedCreatorVideos = false;
+
+            async function presentCreatorModal() {
+                // Pause dynamic media streaming on click presentation
+                if (player && !player.paused()) {
+                    player.pause();
+                }
+
+                modalOverlay.style.display = 'flex';
+                setTimeout(() => modalOverlay.classList.add('active'), 10);
+
+                if (hasLoadedCreatorVideos) return; 
+
+                try {
+                    if(!targetVideoId) return;
+
+                    // Fetch structural creator ID mapping metadata parameters safely
+                    const contextRes = await fetch(`https://api.dailymotion.com/video/${targetVideoId}?fields=owner,owner.screenname,owner.avatar_120_url`);
+                    const contextData = await contextRes.json();
+                    
+                    if (contextData && contextData.owner) {
+                        const ownerId = contextData.owner;
+                        const screenName = contextData['owner.screenname'] || "Verified Creator";
+                        const avatarUrl = contextData['owner.avatar_120_url'] || "";
+
+                        document.getElementById('modal-creator-title').textContent = screenName;
+                        const modalAvatarSlot = document.getElementById('modal-avatar-slot');
+                        
+                        if (avatarUrl) {
+                            modalAvatarSlot.innerHTML = `<img src="${avatarUrl}">`;
+                        } else {
+                            const initial = screenName.charAt(0).toUpperCase();
+                            modalAvatarSlot.innerHTML = `<div style="width:100%;height:100%;background:#ff0000;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#fff">${initial}</div>`;
+                        }
+
+                        // Retrieve the collection array containing structural user upload models
+                        const listRes = await fetch(`https://api.dailymotion.com/user/${ownerId}/videos?fields=id,title,thumbnail_240_url,duration&limit=6`);
+                        const listData = await listRes.json();
+
+                        if (listData && listData.list) {
+                            const gridContainer = document.getElementById('modal-grid-items');
+                            gridContainer.innerHTML = '';
+
+                            listData.list.forEach(item => {
+                                const mins = Math.floor(item.duration / 60);
+                                const secs = String(item.duration % 60).padStart(2, '0');
+
+                                const element = document.createElement('a');
+                                element.className = 'endscreen-card';
+                                element.href = `/download?id_or_url=${item.id}`;
+                                element.innerHTML = `
+                                    <div class="endscreen-thumb-container">
+                                        <img src="${item.thumbnail_240_url}">
+                                        <div class="endscreen-duration">${mins}:${secs}</div>
+                                    </div>
+                                    <div class="endscreen-meta">
+                                        <div class="endscreen-v-title">${item.title}</div>
+                                        <div class="endscreen-v-creator">${screenName}</div>
+                                    </div>
+                                `;
+
+                                element.addEventListener('click', function() {
+                                    document.getElementById('page-interstitial-screen').style.display = 'flex';
+                                });
+
+                                gridContainer.appendChild(element);
+                            });
+                            hasLoadedCreatorVideos = true;
+                        }
+                    }
+                } catch (err) {
+                    console.error("Popup engine request lifecycle exception:", err);
+                    document.getElementById('modal-grid-items').innerHTML = '<div style="color:var(--text-secondary);grid-column:1/-1;text-align:center;padding:20px;">Could not fetch profile channel records.</div>';
+                }
+            }
+
+            function dismissCreatorModal() {
+                modalOverlay.classList.remove('active');
+                setTimeout(() => {
+                    modalOverlay.style.display = 'none';
+                }, 300);
+            }
+
+            creatorTrigger.addEventListener('click', presentCreatorModal);
+            modalClose.addEventListener('click', dismissCreatorModal);
+            modalOverlay.addEventListener('click', function(e) {
+                if (e.target === modalOverlay) dismissCreatorModal();
+            });
         });
     </script>
 </body>
@@ -547,9 +772,7 @@ def render_player():
     else:
         target_url = f"https://www.dailymotion.com/video/{clean_video_id}"
 
-    # --- 🛠️ FIXED EXTRACTION CONFIGURATION ENGINE ---
     ydl_opts = {
-        # Changed 'best' to a permissive query selector fallback sequence
         'format': 'bestvideo+bestaudio/best', 
         'quiet': True,
         'no_warnings': True,
@@ -573,10 +796,8 @@ def render_player():
                 
             formats = info.get('formats', [])
             
-            # Robust fallback resolution extraction sorting
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
             
-            # Select the most reliable direct stream target
             if hls_streams:
                 m3u8_url = hls_streams[-1].get('url')
             else:
@@ -603,6 +824,7 @@ def render_player():
             
     except Exception as error:
         return f"Extraction Pipeline Exception Error: {str(error)}", 500
+
 @app.route('/manifest')
 def proxy_m3u8():
     raw_m3u8_url = request.args.get('url')
