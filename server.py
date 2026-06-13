@@ -136,7 +136,7 @@ PLAYER_TEMPLATE = """
             pointer-events: auto;
         }
 
-        .embed-header-left { display: flex; align-items: center; gap: 12px; pointer-events: auto; min-width: 0; }
+        .embed-header-left { display: flex; align-items: center; gap: 12px; pointer-events: auto; min-width: 0; flex: 1; }
 
         .embed-channel-icon-container {
             width: 40px;
@@ -157,9 +157,39 @@ PLAYER_TEMPLATE = """
         .embed-video-title { color: var(--text-primary); font-size: 1.1rem; font-weight: 500; margin: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
         .embed-channel-name { color: var(--text-secondary); font-size: 0.85rem; margin-top: 2px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
          
+        .embed-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            pointer-events: auto;
+            flex-shrink: 0;
+        }
+
+        /* 🌌 NEBULAVIEW BRANDING STYLES */
+        .nebulaview-branding-tag {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(15, 15, 15, 0.65);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 0.8px;
+            color: #ffffff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .nebulaview-branding-tag span {
+            color: var(--accent-primary);
+        }
+
         .embed-icon-btn {
             background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 8px;
-            filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); pointer-events: auto;
+            filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); display: flex; align-items: center; justify-content: center;
         }
 
         .player-endscreen-overlay {
@@ -202,6 +232,7 @@ PLAYER_TEMPLATE = """
         @media (max-width: 560px) {
             .endscreen-grid { grid-template-columns: 1fr; gap: 14px; }
             .endscreen-title { font-size: 1.1rem; margin-bottom: 14px; }
+            .nebulaview-branding-tag { padding: 5px 10px; font-size: 0.75rem; }
         }
 
         .endscreen-card {
@@ -448,7 +479,11 @@ PLAYER_TEMPLATE = """
                     <span class="embed-channel-name">{{ author_name if author_name else "Verified Creator" }}</span>
                 </div>
             </div>
+            
             <div class="embed-header-actions">
+                <div class="nebulaview-branding-tag">
+                    Nebula<span>View</span>
+                </div>
                 <button class="embed-icon-btn" id="embed-share-btn">
                     <svg style="width:22px;height:22px;fill:currentColor" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.8 2.04.8 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
                 </button>
@@ -659,7 +694,6 @@ PLAYER_TEMPLATE = """
             let hasLoadedCreatorVideos = false;
 
             async function presentCreatorModal() {
-                // Pause dynamic media streaming on click presentation
                 if (player && !player.paused()) {
                     player.pause();
                 }
@@ -672,7 +706,6 @@ PLAYER_TEMPLATE = """
                 try {
                     if(!targetVideoId) return;
 
-                    // Fetch structural creator ID mapping metadata parameters safely
                     const contextRes = await fetch(`https://api.dailymotion.com/video/${targetVideoId}?fields=owner,owner.screenname,owner.avatar_120_url`);
                     const contextData = await contextRes.json();
                     
@@ -691,7 +724,6 @@ PLAYER_TEMPLATE = """
                             modalAvatarSlot.innerHTML = `<div style="width:100%;height:100%;background:#ff0000;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#fff">${initial}</div>`;
                         }
 
-                        // Retrieve the collection array containing structural user upload models
                         const listRes = await fetch(`https://api.dailymotion.com/user/${ownerId}/videos?fields=id,title,thumbnail_240_url,duration&limit=6`);
                         const listData = await listRes.json();
 
