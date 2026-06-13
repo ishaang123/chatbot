@@ -677,15 +677,20 @@ PLAYER_TEMPLATE = """
                 });
                 controlBar.el().appendChild(fsBtn);
             });
-
             document.getElementById('embed-share-btn').addEventListener('click', function() {
-                if (navigator.share) {
-                    navigator.share({ title: document.title, url: window.location.href }).catch(console.error);
-                } else {
-                    navigator.clipboard.writeText(window.location.href);
-                    alert("Link copied to clipboard memory.");
-                }
-            });
+    // Fallback to current URL if the player isn't loaded inside an iframe
+    const shareUrl = document.referrer || window.location.href;
+
+    if (navigator.share) {
+        navigator.share({ 
+            title: document.title, 
+            url: shareUrl 
+        }).catch(console.error);
+    } else {
+        navigator.clipboard.writeText(shareUrl);
+        alert("Link copied to clipboard memory.");
+    }
+});
 
             // --- 👤 CREATOR POPUP CONTROLLER LOGIC ENGINE ---
             const creatorTrigger = document.getElementById('creator-hud-trigger');
