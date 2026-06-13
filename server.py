@@ -312,7 +312,6 @@ PLAYER_TEMPLATE = """
             flex-shrink: 0;
         }
 
-        /* 🌌 NEBULAVIEW BRANDING STYLES */
         .nebulaview-branding-tag {
             display: flex;
             align-items: center;
@@ -505,6 +504,8 @@ PLAYER_TEMPLATE = """
             align-items: center;
             opacity: 0;
             transition: opacity 0.3s ease;
+            box-sizing: border-box;
+            padding: 10px;
         }
 
         .creator-modal-overlay.active {
@@ -515,9 +516,9 @@ PLAYER_TEMPLATE = """
         .creator-modal-content {
             background: #121214;
             border: 1px solid rgba(255, 255, 255, 0.08);
-            width: 90%;
+            width: 100%;
             max-width: 760px;
-            height: 75vh;
+            max-height: 90vh; /* Fixed max constraint instead of standard static height */
             border-radius: 20px;
             display: flex;
             flex-direction: column;
@@ -536,12 +537,14 @@ PLAYER_TEMPLATE = """
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0; /* Keep the header from squeezing */
         }
 
         .creator-modal-profile {
             display: flex;
             align-items: center;
             gap: 14px;
+            min-width: 0; /* Allow scaling inward without overflowing text elements */
         }
 
         .creator-modal-avatar {
@@ -550,6 +553,7 @@ PLAYER_TEMPLATE = """
             border-radius: 50%;
             overflow: hidden;
             background: #272727;
+            flex-shrink: 0;
         }
 
         .creator-modal-avatar img {
@@ -562,12 +566,18 @@ PLAYER_TEMPLATE = """
             font-size: 1.15rem;
             font-weight: 700;
             margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .creator-modal-subtitle {
             font-size: 0.8rem;
             color: var(--text-secondary);
             margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .creator-close-btn {
@@ -582,6 +592,7 @@ PLAYER_TEMPLATE = """
             align-items: center;
             justify-content: center;
             transition: background 0.2s;
+            flex-shrink: 0;
         }
 
         .creator-close-btn:hover {
@@ -592,6 +603,7 @@ PLAYER_TEMPLATE = """
             flex: 1;
             overflow-y: auto;
             padding: 24px;
+            -webkit-overflow-scrolling: touch; /* Smooth iOS ecosystem scrolling behavior */
         }
 
         .creator-video-grid {
@@ -600,10 +612,27 @@ PLAYER_TEMPLATE = """
             gap: 16px;
         }
 
+        /* 📱 EXTENSIVE SMALL VIEWPORT REMAPPING RULES */
         @media (max-width: 560px) {
-            .creator-video-grid { grid-template-columns: 1fr; gap: 12px; }
-            .creator-modal-content { height: 85vh; width: 95%; }
-            .creator-video-body { padding: 16px; }
+            .creator-video-grid { grid-template-columns: 1fr; gap: 10px; }
+            .creator-modal-content { max-height: 85vh; width: 100%; border-radius: 14px; }
+            .creator-modal-header { padding: 12px 16px; }
+            .creator-video-body { padding: 12px; }
+            .creator-modal-title { font-size: 0.95rem; }
+            .creator-modal-subtitle { font-size: 0.72rem; }
+            .creator-modal-avatar { width: 34px; height: 34px; }
+            .creator-close-btn { width: 30px; height: 30px; }
+            .endscreen-card { padding: 8px; gap: 10px; }
+            .endscreen-thumb-container { width: 100px; height: 58px; }
+            .endscreen-v-title { font-size: 0.8rem; }
+        }
+
+        /* 📐 EXTRA RESTRAINT FOR ULTRA-TIGHT IFRAMES / HIGHLY CONDENSED HEIGHTS */
+        @media (max-height: 400px) {
+            .creator-modal-content { max-height: 92vh; }
+            .creator-modal-header { padding: 8px 12px; }
+            .creator-video-body { padding: 8px; }
+            .creator-video-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
         }
     </style>
 </head>
@@ -821,20 +850,20 @@ PLAYER_TEMPLATE = """
                 });
                 controlBar.el().appendChild(fsBtn);
             });
+            
             document.getElementById('embed-share-btn').addEventListener('click', function() {
-    // Fallback to current URL if the player isn't loaded inside an iframe
-    const shareUrl = document.referrer || window.location.href;
+                const shareUrl = document.referrer || window.location.href;
 
-    if (navigator.share) {
-        navigator.share({ 
-            title: document.title, 
-            url: shareUrl 
-        }).catch(console.error);
-    } else {
-        navigator.clipboard.writeText(shareUrl);
-        alert("Link copied to clipboard memory.");
-    }
-});
+                if (navigator.share) {
+                    navigator.share({ 
+                        title: document.title, 
+                        url: shareUrl 
+                    }).catch(console.error);
+                } else {
+                    navigator.clipboard.writeText(shareUrl);
+                    alert("Link copied to clipboard memory.");
+                }
+            });
 
             // --- 👤 CREATOR POPUP CONTROLLER LOGIC ENGINE ---
             const creatorTrigger = document.getElementById('creator-hud-trigger');
