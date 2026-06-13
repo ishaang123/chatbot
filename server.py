@@ -58,17 +58,20 @@ def get_dailymotion_token():
 def scrape_dailymotion_comments():
     video_id = request.args.get('watch')
     if not video_id:
-        return jsonify({"error": "Missing watch parameter"}), 400
+        response = jsonify({"error": "Missing watch parameter"})
+        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+        return response, 400
 
     clean_id = video_id.replace('dm-', '')
 
     token = get_dailymotion_token()
     if not token:
-        return jsonify({"error": "Failed to authenticate with Dailymotion backend"}), 500
+        response = jsonify({"error": "Failed to authenticate with Dailymotion backend"})
+        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+        return response, 500
 
     graphql_url = "https://graphql.api.dailymotion.com"
 
-    # Fixed Query: Replaced screenName with name inside Channel object
     graphql_query = """
     query($videoId: String!) {
         video(xid: $videoId) {
@@ -105,32 +108,38 @@ def scrape_dailymotion_comments():
     }
 
     try:
-        response = requests.post(
+        res = requests.post(
             graphql_url,
             json=payload,
             headers=headers,
             timeout=10
         )
 
-        if response.status_code == 401:
+        if res.status_code == 401:
             CACHE["access_token"] = None
-            return jsonify({"error": "Token expired, please refresh endpoint request"}), 401
+            response = jsonify({"error": "Token expired, please refresh endpoint request"})
+            response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+            return response, 401
 
-        if response.status_code != 200:
-            return jsonify({
+        if res.status_code != 200:
+            response = jsonify({
                 "comments": [],
-                "debug": f"API responded with status code {response.status_code}",
-                "server_response": response.text
-            }), response.status_code
+                "debug": f"API responded with status code {res.status_code}",
+                "server_response": res.text
+            })
+            response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+            return response, res.status_code
 
-        res_data = response.json()
+        res_data = res.json()
 
         if "errors" in res_data:
-            return jsonify({
+            response = jsonify({
                 "comments": [],
                 "debug": "GraphQL Engine Schema Failure",
                 "details": res_data.get("errors")
-            }), 400
+            })
+            response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+            return response, 400
 
         parsed_comments = []
         video_data = res_data.get("data", {}).get("video") or {}
@@ -140,7 +149,6 @@ def scrape_dailymotion_comments():
             node = edge.get("node", {})
             creator_node = node.get("creator") or {}
 
-            # Map display fields based on updated schema properties
             display_name = creator_node.get("name") or creator_node.get("username") or "Dailymotion User"
 
             parsed_comments.append({
@@ -149,13 +157,18 @@ def scrape_dailymotion_comments():
                 "text": node.get("text") or ""
             })
 
-        return jsonify({"comments": parsed_comments})
+        # Final successful return tracking
+        response = jsonify({"comments": parsed_comments})
+        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+        return response
 
     except Exception as e:
-        return jsonify({
+        response = jsonify({
             "error": "Failed to parse API runtime response",
             "details": str(e)
-        }), 500
+        })
+        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+        return response, 500
 
 INDEX_TEMPLATE = """
 <!DOCTYPE html>
