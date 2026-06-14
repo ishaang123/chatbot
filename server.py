@@ -28,8 +28,6 @@ CACHE = {
     "access_token": None
 }
 
-# Simple thread-safe session tracking dictionary to track chunk requests per client IP
-CLIENT_BUFFER_TRACKER = {}
 
 def get_dailymotion_token():
     if CACHE["access_token"]:
@@ -61,7 +59,7 @@ def scrape_dailymotion_comments():
     video_id = request.args.get('watch')
     if not video_id:
         response = jsonify({"error": "Missing watch parameter"})
-        response.headers["Access-Control-Allow-Origin"] = "*" 
+        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
         return response, 400
 
     clean_id = video_id.replace('dm-', '')
@@ -69,7 +67,7 @@ def scrape_dailymotion_comments():
     token = get_dailymotion_token()
     if not token:
         response = jsonify({"error": "Failed to authenticate with Dailymotion backend"})
-        response.headers["Access-Control-Allow-Origin"] = "*" 
+        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
         return response, 500
 
     graphql_url = "https://graphql.api.dailymotion.com"
@@ -110,12 +108,17 @@ def scrape_dailymotion_comments():
     }
 
     try:
-        res = requests.post(graphql_url, json=payload, headers=headers, timeout=10)
+        res = requests.post(
+            graphql_url,
+            json=payload,
+            headers=headers,
+            timeout=10
+        )
 
         if res.status_code == 401:
             CACHE["access_token"] = None
             response = jsonify({"error": "Token expired, please refresh endpoint request"})
-            response.headers["Access-Control-Allow-Origin"] = "*" 
+            response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
             return response, 401
 
         if res.status_code != 200:
@@ -124,7 +127,7 @@ def scrape_dailymotion_comments():
                 "debug": f"API responded with status code {res.status_code}",
                 "server_response": res.text
             })
-            response.headers["Access-Control-Allow-Origin"] = "*" 
+            response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
             return response, res.status_code
 
         res_data = res.json()
@@ -135,7 +138,7 @@ def scrape_dailymotion_comments():
                 "debug": "GraphQL Engine Schema Failure",
                 "details": res_data.get("errors")
             })
-            response.headers["Access-Control-Allow-Origin"] = "*" 
+            response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
             return response, 400
 
         parsed_comments = []
@@ -145,15 +148,18 @@ def scrape_dailymotion_comments():
         for edge in comment_edges:
             node = edge.get("node", {})
             creator_node = node.get("creator") or {}
+
             display_name = creator_node.get("name") or creator_node.get("username") or "Dailymotion User"
+
             parsed_comments.append({
                 "id": node.get("id") or "",
                 "author": display_name,
                 "text": node.get("text") or ""
             })
 
+        # Final successful return tracking
         response = jsonify({"comments": parsed_comments})
-        response.headers["Access-Control-Allow-Origin"] = "*" 
+        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
         return response
 
     except Exception as e:
@@ -161,7 +167,7 @@ def scrape_dailymotion_comments():
             "error": "Failed to parse API runtime response",
             "details": str(e)
         })
-        response.headers["Access-Control-Allow-Origin"] = "*" 
+        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
         return response, 500
 
 INDEX_TEMPLATE = """
@@ -235,7 +241,6 @@ PLAYER_TEMPLATE = """
             width: 100% !important;
             height: 100% !important;
             background-color: #000 !important;
-            z-index: 2;
         }
 
         .vjs-poster {
@@ -258,7 +263,7 @@ PLAYER_TEMPLATE = """
             width: 100%;
             padding: 24px 24px 48px 24px;
             background: var(--gradient-top);
-            z-index: 15 !important;
+            z-index: 10;
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
@@ -307,6 +312,27 @@ PLAYER_TEMPLATE = """
             flex-shrink: 0;
         }
 
+        .nebulaview-branding-tag {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(15, 15, 15, 0.65);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 0.8px;
+            color: #ffffff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .nebulaview-branding-tag span {
+            color: var(--accent-primary);
+        }
+
         .embed-icon-btn {
             background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 8px;
             filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); display: flex; align-items: center; justify-content: center;
@@ -319,7 +345,7 @@ PLAYER_TEMPLATE = """
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.92);
-            z-index: 16 !important; 
+            z-index: 12; 
             display: none; 
             flex-direction: column;
             justify-content: center;
@@ -352,6 +378,7 @@ PLAYER_TEMPLATE = """
         @media (max-width: 560px) {
             .endscreen-grid { grid-template-columns: 1fr; gap: 14px; }
             .endscreen-title { font-size: 1.1rem; margin-bottom: 14px; }
+            .nebulaview-branding-tag { padding: 5px 10px; font-size: 0.75rem; }
         }
 
         .endscreen-card {
@@ -461,6 +488,7 @@ PLAYER_TEMPLATE = """
             opacity: 0.85;
         }
 
+        /* 👤 ANIMATED CREATOR VIDEOS MODAL STYLES */
         .creator-modal-overlay {
             position: fixed;
             top: 0;
@@ -490,7 +518,7 @@ PLAYER_TEMPLATE = """
             border: 1px solid rgba(255, 255, 255, 0.08);
             width: 100%;
             max-width: 760px;
-            max-height: 90vh;
+            max-height: 90vh; /* Fixed max constraint instead of standard static height */
             border-radius: 20px;
             display: flex;
             flex-direction: column;
@@ -509,14 +537,14 @@ PLAYER_TEMPLATE = """
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-shrink: 0;
+            flex-shrink: 0; /* Keep the header from squeezing */
         }
 
         .creator-modal-profile {
             display: flex;
             align-items: center;
             gap: 14px;
-            min-width: 0;
+            min-width: 0; /* Allow scaling inward without overflowing text elements */
         }
 
         .creator-modal-avatar {
@@ -575,7 +603,7 @@ PLAYER_TEMPLATE = """
             flex: 1;
             overflow-y: auto;
             padding: 24px;
-            -webkit-overflow-scrolling: touch;
+            -webkit-overflow-scrolling: touch; /* Smooth iOS ecosystem scrolling behavior */
         }
 
         .creator-video-grid {
@@ -584,6 +612,7 @@ PLAYER_TEMPLATE = """
             gap: 16px;
         }
 
+        /* 📱 EXTENSIVE SMALL VIEWPORT REMAPPING RULES */
         @media (max-width: 560px) {
             .creator-video-grid { grid-template-columns: 1fr; gap: 10px; }
             .creator-modal-content { max-height: 85vh; width: 100%; border-radius: 14px; }
@@ -598,6 +627,7 @@ PLAYER_TEMPLATE = """
             .endscreen-v-title { font-size: 0.8rem; }
         }
 
+        /* 📐 EXTRA RESTRAINT FOR ULTRA-TIGHT IFRAMES / HIGHLY CONDENSED HEIGHTS */
         @media (max-height: 400px) {
             .creator-modal-content { max-height: 92vh; }
             .creator-modal-header { padding: 8px 12px; }
@@ -708,6 +738,7 @@ PLAYER_TEMPLATE = """
                     data.list.forEach(item => {
                         const mins = Math.floor(item.duration / 60);
                         const secs = String(item.duration % 60).padStart(2, '0');
+                        
                         const uploaderUsername = (item.owner && item.owner.username) ? item.owner.username : 'Creator';
                         
                         const element = document.createElement('a');
@@ -751,9 +782,8 @@ PLAYER_TEMPLATE = """
                 
                 html5: {
                     vhs: {
-                        overrideNative: false,
-                        maxBufferLength: 10,
-                        targetBufferLength: 5,
+                        maxBufferLength: 12,
+                        forwardBufferLength: 6,
                         backBufferLength: 0
                     }
                 },
@@ -802,7 +832,8 @@ PLAYER_TEMPLATE = """
                     if (videoEl) {
                         if (videoEl.webkitEnterFullscreen) {
                             videoEl.webkitEnterFullscreen();
-                        } else if (videoEl.requestFullscreen) {
+                        } 
+                        else if (videoEl.requestFullscreen) {
                             videoEl.requestFullscreen();
                         } else if (videoEl.msRequestFullscreen) {
                             videoEl.msRequestFullscreen();
@@ -822,22 +853,29 @@ PLAYER_TEMPLATE = """
             
             document.getElementById('embed-share-btn').addEventListener('click', function() {
                 const shareUrl = document.referrer || window.location.href;
+
                 if (navigator.share) {
-                    navigator.share({ title: document.title, url: shareUrl }).catch(console.error);
+                    navigator.share({ 
+                        title: document.title, 
+                        url: shareUrl 
+                    }).catch(console.error);
                 } else {
                     navigator.clipboard.writeText(shareUrl);
                     alert("Link copied to clipboard memory.");
                 }
             });
 
-            // Popup Profile Engine
+            // --- 👤 CREATOR POPUP CONTROLLER LOGIC ENGINE ---
             const creatorTrigger = document.getElementById('creator-hud-trigger');
             const modalOverlay = document.getElementById('creator-profile-modal');
             const modalClose = document.getElementById('modal-close-trigger');
             let hasLoadedCreatorVideos = false;
 
             async function presentCreatorModal() {
-                if (player && !player.paused()) player.pause();
+                if (player && !player.paused()) {
+                    player.pause();
+                }
+
                 modalOverlay.style.display = 'flex';
                 setTimeout(() => modalOverlay.classList.add('active'), 10);
 
@@ -845,6 +883,7 @@ PLAYER_TEMPLATE = """
 
                 try {
                     if(!targetVideoId) return;
+
                     const contextRes = await fetch(`https://api.dailymotion.com/video/${targetVideoId}?fields=owner,owner.screenname,owner.avatar_120_url`);
                     const contextData = await contextRes.json();
                     
@@ -887,9 +926,11 @@ PLAYER_TEMPLATE = """
                                         <div class="endscreen-v-creator">${screenName}</div>
                                     </div>
                                 `;
+
                                 element.addEventListener('click', function() {
                                     document.getElementById('page-interstitial-screen').style.display = 'flex';
                                 });
+
                                 gridContainer.appendChild(element);
                             });
                             hasLoadedCreatorVideos = true;
@@ -903,12 +944,16 @@ PLAYER_TEMPLATE = """
 
             function dismissCreatorModal() {
                 modalOverlay.classList.remove('active');
-                setTimeout(() => { modalOverlay.style.display = 'none'; }, 300);
+                setTimeout(() => {
+                    modalOverlay.style.display = 'none';
+                }, 300);
             }
 
             creatorTrigger.addEventListener('click', presentCreatorModal);
             modalClose.addEventListener('click', dismissCreatorModal);
-            modalOverlay.addEventListener('click', function(e) { if (e.target === modalOverlay) dismissCreatorModal(); });
+            modalOverlay.addEventListener('click', function(e) {
+                if (e.target === modalOverlay) dismissCreatorModal();
+            });
         });
     </script>
 </body>
@@ -960,6 +1005,7 @@ def render_player():
                 return "Extraction failed.", 500
                 
             formats = info.get('formats', [])
+            
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
             
             if hls_streams:
@@ -1008,56 +1054,36 @@ def proxy_m3u8():
         return "Timeout during proxy resolution", 504
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
-    lines = resp.text.splitlines()
-    
     rewritten_lines = []
-    segment_index = 0
 
-    # We track how many valid chunks we've given out *in this specific manifest request*
-    # Let the browser have the first 8 segments at full quality so it starts instantly.
-    for line in lines:
+    for line in resp.text.splitlines():
         line_stripped = line.strip()
         if not line_stripped:
             continue
 
-        if not line_stripped.startswith('#'):
-            segment_index += 1
+        if 'URI=' in line_stripped:
+            def replace_uri(match):
+                rel_path = match.group(1).strip('"\'')
+                abs_url = urllib.parse.urljoin(base_url, rel_path)
+                proxy_route = "/manifest" if (".m3u8" in rel_path or "manifest" in rel_path) else "/segment"
+                return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}&priority={priority}"'
+            line_stripped = re.sub(r'URI=(["\'].*?["\'])', replace_uri, line_stripped)
+            rewritten_lines.append(line_stripped)
+
+        elif not line_stripped.startswith('#'):
             full_url = line_stripped if line_stripped.startswith(('http://', 'https://')) else urllib.parse.urljoin(base_url, line_stripped)
             encoded_url = urllib.parse.quote_plus(full_url)
-
             if '.m3u8' in line_stripped or 'manifest' in line_stripped:
                 rewritten_lines.append(f"/manifest?url={encoded_url}&priority={priority}")
             else:
-                # 🛡️ THE DATA PLACEHOLDER PROTECTION SHIELD
-                # Let the browser see the entire layout structure, but if it tries to 
-                # pre-cache past segment 8, substitute the heavy video chunks with a 0-bandwidth route.
-                if segment_index > 8:
-                    rewritten_lines.append(f"/empty-placeholder-segment")
-                else:
-                    rewritten_lines.append(f"/segment?url={encoded_url}&priority={priority}")
+                rewritten_lines.append(f"/segment?url={encoded_url}&priority={priority}")
         else:
-            # Keep all structure tags, durations, and targets intact 
-            # so the browser calculates the precise duration perfectly!
-            if 'URI=' in line_stripped:
-                def replace_uri(match):
-                    rel_path = match.group(1).strip('"\'')
-                    abs_url = urllib.parse.urljoin(base_url, rel_path)
-                    proxy_route = "/manifest" if (".m3u8" in rel_path or "manifest" in rel_path) else "/segment"
-                    return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}&priority={priority}"'
-                line_stripped = re.sub(r'URI=(["\'].*?["\'])', replace_uri, line_stripped)
             rewritten_lines.append(line_stripped)
 
     response = Response("\n".join(rewritten_lines), content_type="application/vnd.apple.mpegurl")
-    response.headers["Cache-Control"] = "public, max-age=4" # Short cache control allows clean seeking
+    response.headers["Cache-Control"] = "public, max-age=2"
     return response
 
-# 🛑 THE BANDWIDTH SAVER ENDPOINT
-@app.route('/empty-placeholder-segment')
-def empty_placeholder():
-    # Return a completely valid, microscopic 1-byte file structure.
-    # The browser's download thread finishes instantly using 0 data, 
-    # but the player won't stall out because it received a clean 200 OK block.
-    return Response(b'\x00', content_type="video/MP2T")
 @app.route('/segment')
 def proxy_ts_segment():
     raw_ts_url = request.args.get('url')
@@ -1067,7 +1093,6 @@ def proxy_ts_segment():
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     
-    # ⚡ 0 DELAY PASS-THROUGH
     headers = {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
         'Accept': '*/*',
@@ -1077,6 +1102,7 @@ def proxy_ts_segment():
     
     try:
         req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
+        
         content_type = req.headers.get('Content-Type')
         if not content_type or content_type == 'text/plain':
             if '.mp4' in raw_ts_url or '/fmp4/' in raw_ts_url:
