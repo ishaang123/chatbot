@@ -768,7 +768,6 @@ PLAYER_TEMPLATE = """
                 console.error("Delayed endscreen engine exception:", e);
             }
         }
-
         document.addEventListener("DOMContentLoaded", function() {
             resolveMediaAssets();
             player = videojs('my-video', {
@@ -782,8 +781,14 @@ PLAYER_TEMPLATE = """
                 
                 html5: {
                     vhs: {
-                        maxBufferLength: 12,
-                        forwardBufferLength: 6,
+                        // 1. The hard ceiling (in seconds) the buffer is never allowed to exceed
+                        maxBufferLength: 6,
+                        
+                        // 2. FIX: The goal duration (in seconds) the player will try to maintain.
+                        // Once it hits this, it stops downloading new segments.
+                        targetBufferLength: 4,
+                        
+                        // 3. Keeps the player from caching previously watched segments in memory
                         backBufferLength: 0
                     }
                 },
