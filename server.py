@@ -241,6 +241,7 @@ PLAYER_TEMPLATE = """
             width: 100% !important;
             height: 100% !important;
             background-color: #000 !important;
+            z-index: 2;
         }
 
         .vjs-poster {
@@ -263,7 +264,7 @@ PLAYER_TEMPLATE = """
             width: 100%;
             padding: 24px 24px 48px 24px;
             background: var(--gradient-top);
-            z-index: 10;
+            z-index: 15 !important;
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
@@ -312,27 +313,6 @@ PLAYER_TEMPLATE = """
             flex-shrink: 0;
         }
 
-        .nebulaview-branding-tag {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(15, 15, 15, 0.65);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            padding: 6px 12px;
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            font-weight: 700;
-            font-size: 0.85rem;
-            letter-spacing: 0.8px;
-            color: #ffffff;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-        .nebulaview-branding-tag span {
-            color: var(--accent-primary);
-        }
-
         .embed-icon-btn {
             background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 8px;
             filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.9)); display: flex; align-items: center; justify-content: center;
@@ -345,7 +325,7 @@ PLAYER_TEMPLATE = """
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.92);
-            z-index: 12; 
+            z-index: 16 !important; 
             display: none; 
             flex-direction: column;
             justify-content: center;
@@ -378,7 +358,6 @@ PLAYER_TEMPLATE = """
         @media (max-width: 560px) {
             .endscreen-grid { grid-template-columns: 1fr; gap: 14px; }
             .endscreen-title { font-size: 1.1rem; margin-bottom: 14px; }
-            .nebulaview-branding-tag { padding: 5px 10px; font-size: 0.75rem; }
         }
 
         .endscreen-card {
@@ -488,7 +467,6 @@ PLAYER_TEMPLATE = """
             opacity: 0.85;
         }
 
-        /* 👤 ANIMATED CREATOR VIDEOS MODAL STYLES */
         .creator-modal-overlay {
             position: fixed;
             top: 0;
@@ -518,7 +496,7 @@ PLAYER_TEMPLATE = """
             border: 1px solid rgba(255, 255, 255, 0.08);
             width: 100%;
             max-width: 760px;
-            max-height: 90vh; /* Fixed max constraint instead of standard static height */
+            max-height: 90vh;
             border-radius: 20px;
             display: flex;
             flex-direction: column;
@@ -537,14 +515,14 @@ PLAYER_TEMPLATE = """
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-shrink: 0; /* Keep the header from squeezing */
+            flex-shrink: 0;
         }
 
         .creator-modal-profile {
             display: flex;
             align-items: center;
             gap: 14px;
-            min-width: 0; /* Allow scaling inward without overflowing text elements */
+            min-width: 0;
         }
 
         .creator-modal-avatar {
@@ -603,7 +581,7 @@ PLAYER_TEMPLATE = """
             flex: 1;
             overflow-y: auto;
             padding: 24px;
-            -webkit-overflow-scrolling: touch; /* Smooth iOS ecosystem scrolling behavior */
+            -webkit-overflow-scrolling: touch;
         }
 
         .creator-video-grid {
@@ -612,7 +590,6 @@ PLAYER_TEMPLATE = """
             gap: 16px;
         }
 
-        /* 📱 EXTENSIVE SMALL VIEWPORT REMAPPING RULES */
         @media (max-width: 560px) {
             .creator-video-grid { grid-template-columns: 1fr; gap: 10px; }
             .creator-modal-content { max-height: 85vh; width: 100%; border-radius: 14px; }
@@ -627,7 +604,6 @@ PLAYER_TEMPLATE = """
             .endscreen-v-title { font-size: 0.8rem; }
         }
 
-        /* 📐 EXTRA RESTRAINT FOR ULTRA-TIGHT IFRAMES / HIGHLY CONDENSED HEIGHTS */
         @media (max-height: 400px) {
             .creator-modal-content { max-height: 92vh; }
             .creator-modal-header { padding: 8px 12px; }
@@ -768,6 +744,7 @@ PLAYER_TEMPLATE = """
                 console.error("Delayed endscreen engine exception:", e);
             }
         }
+
         document.addEventListener("DOMContentLoaded", function() {
             resolveMediaAssets();
             player = videojs('my-video', {
@@ -781,14 +758,12 @@ PLAYER_TEMPLATE = """
                 
                 html5: {
                     vhs: {
-                        // 1. The hard ceiling (in seconds) the buffer is never allowed to exceed
-                        maxBufferLength: 6,
+                        // Protect native decoding parsing loops (avoids Media Code 3 errors)
+                        overrideNative: false,
                         
-                        // 2. FIX: The goal duration (in seconds) the player will try to maintain.
-                        // Once it hits this, it stops downloading new segments.
-                        targetBufferLength: 4,
-                        
-                        // 3. Keeps the player from caching previously watched segments in memory
+                        // Strict data clamp rules to throttle runaway cache segment loading
+                        maxBufferLength: 10,
+                        targetBufferLength: 5,
                         backBufferLength: 0
                     }
                 },
@@ -829,140 +804,7 @@ PLAYER_TEMPLATE = """
                 // 2. UNRESTRICTED DIRECT HARDWARE MOBILE FULLSCREEN BYPASS
                 const fsBtn = document.createElement('div');
                 fsBtn.className = 'vjs-custom-fullscreen-control vjs-control vjs-button';
-                fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
-                
-                fsBtn.addEventListener('click', function() {
-                    const videoEl = document.getElementById('my-video_html5_api') || player.tech({ IWillNotUseThisInPlugins: true }).el();
-
-                    if (videoEl) {
-                        if (videoEl.webkitEnterFullscreen) {
-                            videoEl.webkitEnterFullscreen();
-                        } 
-                        else if (videoEl.requestFullscreen) {
-                            videoEl.requestFullscreen();
-                        } else if (videoEl.msRequestFullscreen) {
-                            videoEl.msRequestFullscreen();
-                        } else if (videoEl.mozRequestFullScreen) {
-                            videoEl.mozRequestFullScreen();
-                        } else {
-                            player.requestFullscreen();
-                        }
-
-                        if (screen.orientation && screen.orientation.lock) {
-                            screen.orientation.lock('landscape').catch(() => {});
-                        }
-                    }
-                });
-                controlBar.el().appendChild(fsBtn);
-            });
-            
-            document.getElementById('embed-share-btn').addEventListener('click', function() {
-                const shareUrl = document.referrer || window.location.href;
-
-                if (navigator.share) {
-                    navigator.share({ 
-                        title: document.title, 
-                        url: shareUrl 
-                    }).catch(console.error);
-                } else {
-                    navigator.clipboard.writeText(shareUrl);
-                    alert("Link copied to clipboard memory.");
-                }
-            });
-
-            // --- 👤 CREATOR POPUP CONTROLLER LOGIC ENGINE ---
-            const creatorTrigger = document.getElementById('creator-hud-trigger');
-            const modalOverlay = document.getElementById('creator-profile-modal');
-            const modalClose = document.getElementById('modal-close-trigger');
-            let hasLoadedCreatorVideos = false;
-
-            async function presentCreatorModal() {
-                if (player && !player.paused()) {
-                    player.pause();
-                }
-
-                modalOverlay.style.display = 'flex';
-                setTimeout(() => modalOverlay.classList.add('active'), 10);
-
-                if (hasLoadedCreatorVideos) return; 
-
-                try {
-                    if(!targetVideoId) return;
-
-                    const contextRes = await fetch(`https://api.dailymotion.com/video/${targetVideoId}?fields=owner,owner.screenname,owner.avatar_120_url`);
-                    const contextData = await contextRes.json();
-                    
-                    if (contextData && contextData.owner) {
-                        const ownerId = contextData.owner;
-                        const screenName = contextData['owner.screenname'] || "Verified Creator";
-                        const avatarUrl = contextData['owner.avatar_120_url'] || "";
-
-                        document.getElementById('modal-creator-title').textContent = screenName;
-                        const modalAvatarSlot = document.getElementById('modal-avatar-slot');
-                        
-                        if (avatarUrl) {
-                            modalAvatarSlot.innerHTML = `<img src="${avatarUrl}">`;
-                        } else {
-                            const initial = screenName.charAt(0).toUpperCase();
-                            modalAvatarSlot.innerHTML = `<div style="width:100%;height:100%;background:#ff0000;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#fff">${initial}</div>`;
-                        }
-
-                        const listRes = await fetch(`https://api.dailymotion.com/user/${ownerId}/videos?fields=id,title,thumbnail_240_url,duration&limit=6`);
-                        const listData = await listRes.json();
-
-                        if (listData && listData.list) {
-                            const gridContainer = document.getElementById('modal-grid-items');
-                            gridContainer.innerHTML = '';
-
-                            listData.list.forEach(item => {
-                                const mins = Math.floor(item.duration / 60);
-                                const secs = String(item.duration % 60).padStart(2, '0');
-
-                                const element = document.createElement('a');
-                                element.className = 'endscreen-card';
-                                element.href = `/download?id_or_url=${item.id}`;
-                                element.innerHTML = `
-                                    <div class="endscreen-thumb-container">
-                                        <img src="${item.thumbnail_240_url}">
-                                        <div class="endscreen-duration">${mins}:${secs}</div>
-                                    </div>
-                                    <div class="endscreen-meta">
-                                        <div class="endscreen-v-title">${item.title}</div>
-                                        <div class="endscreen-v-creator">${screenName}</div>
-                                    </div>
-                                `;
-
-                                element.addEventListener('click', function() {
-                                    document.getElementById('page-interstitial-screen').style.display = 'flex';
-                                });
-
-                                gridContainer.appendChild(element);
-                            });
-                            hasLoadedCreatorVideos = true;
-                        }
-                    }
-                } catch (err) {
-                    console.error("Popup engine request lifecycle exception:", err);
-                    document.getElementById('modal-grid-items').innerHTML = '<div style="color:var(--text-secondary);grid-column:1/-1;text-align:center;padding:20px;">Could not fetch profile channel records.</div>';
-                }
-            }
-
-            function dismissCreatorModal() {
-                modalOverlay.classList.remove('active');
-                setTimeout(() => {
-                    modalOverlay.style.display = 'none';
-                }, 300);
-            }
-
-            creatorTrigger.addEventListener('click', presentCreatorModal);
-            modalClose.addEventListener('click', dismissCreatorModal);
-            modalOverlay.addEventListener('click', function(e) {
-                if (e.target === modalOverlay) dismissCreatorModal();
-            });
-        });
-    </script>
-</body>
-</html>
+                fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4
 """
 
 @app.route('/')
