@@ -1047,7 +1047,7 @@ def proxy_ts_segment():
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     
-    # ⏱️ SERVER-SIDE THROTTLE LOGIC ENGINE
+    # ⏱️ SMART INTELLIGENT THROTTLE ENGINE
     client_ip = request.remote_addr
     now = time.time()
     
@@ -1055,15 +1055,22 @@ def proxy_ts_segment():
         CLIENT_BUFFER_TRACKER[client_ip] = {"count": 1, "last_request": now}
     else:
         session = CLIENT_BUFFER_TRACKER[client_ip]
-        if now - session["last_request"] > 15:
+        time_since_last_req = now - session["last_request"]
+        
+        # FIX: If the user seeks or fast-forwards, requests happen milliseconds apart (< 0.2s).
+        # If they are hammering the server to seek ahead, skip the delay entirely!
+        is_seeking = time_since_last_req < 0.2
+
+        if time_since_last_req > 15:
             session["count"] = 1
         else:
             session["count"] += 1
         session["last_request"] = now
 
-        # If the browser tries to download ahead past the initial 4 segments, slow it down
-        if session["count"] > 4:
-            delay_factor = 1.25 if priority == "high" else 1.5
+        # Only apply the buffer-cap delay if they are playing smoothly, NOT seeking
+        if session["count"] > 4 and not is_seeking:
+            # Gentle pacing delay during normal playback to keep buffer tight
+            delay_factor = 0.8 if priority == "high" else 1.1
             time.sleep(delay_factor)
 
     headers = {
