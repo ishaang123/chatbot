@@ -28,6 +28,8 @@ CACHE = {
     "access_token": None
 }
 
+# Simple thread-safe session tracking dictionary to track chunk requests per client IP
+CLIENT_BUFFER_TRACKER = {}
 
 def get_dailymotion_token():
     if CACHE["access_token"]:
@@ -59,7 +61,7 @@ def scrape_dailymotion_comments():
     video_id = request.args.get('watch')
     if not video_id:
         response = jsonify({"error": "Missing watch parameter"})
-        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+        response.headers["Access-Control-Allow-Origin"] = "*" 
         return response, 400
 
     clean_id = video_id.replace('dm-', '')
@@ -67,7 +69,7 @@ def scrape_dailymotion_comments():
     token = get_dailymotion_token()
     if not token:
         response = jsonify({"error": "Failed to authenticate with Dailymotion backend"})
-        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+        response.headers["Access-Control-Allow-Origin"] = "*" 
         return response, 500
 
     graphql_url = "https://graphql.api.dailymotion.com"
@@ -108,17 +110,12 @@ def scrape_dailymotion_comments():
     }
 
     try:
-        res = requests.post(
-            graphql_url,
-            json=payload,
-            headers=headers,
-            timeout=10
-        )
+        res = requests.post(graphql_url, json=payload, headers=headers, timeout=10)
 
         if res.status_code == 401:
             CACHE["access_token"] = None
             response = jsonify({"error": "Token expired, please refresh endpoint request"})
-            response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+            response.headers["Access-Control-Allow-Origin"] = "*" 
             return response, 401
 
         if res.status_code != 200:
@@ -127,7 +124,7 @@ def scrape_dailymotion_comments():
                 "debug": f"API responded with status code {res.status_code}",
                 "server_response": res.text
             })
-            response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+            response.headers["Access-Control-Allow-Origin"] = "*" 
             return response, res.status_code
 
         res_data = res.json()
@@ -138,7 +135,7 @@ def scrape_dailymotion_comments():
                 "debug": "GraphQL Engine Schema Failure",
                 "details": res_data.get("errors")
             })
-            response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+            response.headers["Access-Control-Allow-Origin"] = "*" 
             return response, 400
 
         parsed_comments = []
@@ -148,18 +145,15 @@ def scrape_dailymotion_comments():
         for edge in comment_edges:
             node = edge.get("node", {})
             creator_node = node.get("creator") or {}
-
             display_name = creator_node.get("name") or creator_node.get("username") or "Dailymotion User"
-
             parsed_comments.append({
                 "id": node.get("id") or "",
                 "author": display_name,
                 "text": node.get("text") or ""
             })
 
-        # Final successful return tracking
         response = jsonify({"comments": parsed_comments})
-        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+        response.headers["Access-Control-Allow-Origin"] = "*" 
         return response
 
     except Exception as e:
@@ -167,7 +161,7 @@ def scrape_dailymotion_comments():
             "error": "Failed to parse API runtime response",
             "details": str(e)
         })
-        response.headers["Access-Control-Allow-Origin"] = "*" # <-- Allow CORS
+        response.headers["Access-Control-Allow-Origin"] = "*" 
         return response, 500
 
 INDEX_TEMPLATE = """
@@ -714,7 +708,6 @@ PLAYER_TEMPLATE = """
                     data.list.forEach(item => {
                         const mins = Math.floor(item.duration / 60);
                         const secs = String(item.duration % 60).padStart(2, '0');
-                        
                         const uploaderUsername = (item.owner && item.owner.username) ? item.owner.username : 'Creator';
                         
                         const element = document.createElement('a');
@@ -758,10 +751,7 @@ PLAYER_TEMPLATE = """
                 
                 html5: {
                     vhs: {
-                        // Protect native decoding parsing loops (avoids Media Code 3 errors)
                         overrideNative: false,
-                        
-                        // Strict data clamp rules to throttle runaway cache segment loading
                         maxBufferLength: 10,
                         targetBufferLength: 5,
                         backBufferLength: 0
@@ -804,7 +794,125 @@ PLAYER_TEMPLATE = """
                 // 2. UNRESTRICTED DIRECT HARDWARE MOBILE FULLSCREEN BYPASS
                 const fsBtn = document.createElement('div');
                 fsBtn.className = 'vjs-custom-fullscreen-control vjs-control vjs-button';
-                fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4
+                fsBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
+                
+                fsBtn.addEventListener('click', function() {
+                    const videoEl = document.getElementById('my-video_html5_api') || player.tech({ IWillNotUseThisInPlugins: true }).el();
+
+                    if (videoEl) {
+                        if (videoEl.webkitEnterFullscreen) {
+                            videoEl.webkitEnterFullscreen();
+                        } else if (videoEl.requestFullscreen) {
+                            videoEl.requestFullscreen();
+                        } else if (videoEl.msRequestFullscreen) {
+                            videoEl.msRequestFullscreen();
+                        } else if (videoEl.mozRequestFullScreen) {
+                            videoEl.mozRequestFullScreen();
+                        } else {
+                            player.requestFullscreen();
+                        }
+
+                        if (screen.orientation && screen.orientation.lock) {
+                            screen.orientation.lock('landscape').catch(() => {});
+                        }
+                    }
+                });
+                controlBar.el().appendChild(fsBtn);
+            });
+            
+            document.getElementById('embed-share-btn').addEventListener('click', function() {
+                const shareUrl = document.referrer || window.location.href;
+                if (navigator.share) {
+                    navigator.share({ title: document.title, url: shareUrl }).catch(console.error);
+                } else {
+                    navigator.clipboard.writeText(shareUrl);
+                    alert("Link copied to clipboard memory.");
+                }
+            });
+
+            // Popup Profile Engine
+            const creatorTrigger = document.getElementById('creator-hud-trigger');
+            const modalOverlay = document.getElementById('creator-profile-modal');
+            const modalClose = document.getElementById('modal-close-trigger');
+            let hasLoadedCreatorVideos = false;
+
+            async function presentCreatorModal() {
+                if (player && !player.paused()) player.pause();
+                modalOverlay.style.display = 'flex';
+                setTimeout(() => modalOverlay.classList.add('active'), 10);
+
+                if (hasLoadedCreatorVideos) return; 
+
+                try {
+                    if(!targetVideoId) return;
+                    const contextRes = await fetch(`https://api.dailymotion.com/video/${targetVideoId}?fields=owner,owner.screenname,owner.avatar_120_url`);
+                    const contextData = await contextRes.json();
+                    
+                    if (contextData && contextData.owner) {
+                        const ownerId = contextData.owner;
+                        const screenName = contextData['owner.screenname'] || "Verified Creator";
+                        const avatarUrl = contextData['owner.avatar_120_url'] || "";
+
+                        document.getElementById('modal-creator-title').textContent = screenName;
+                        const modalAvatarSlot = document.getElementById('modal-avatar-slot');
+                        
+                        if (avatarUrl) {
+                            modalAvatarSlot.innerHTML = `<img src="${avatarUrl}">`;
+                        } else {
+                            const initial = screenName.charAt(0).toUpperCase();
+                            modalAvatarSlot.innerHTML = `<div style="width:100%;height:100%;background:#ff0000;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#fff">${initial}</div>`;
+                        }
+
+                        const listRes = await fetch(`https://api.dailymotion.com/user/${ownerId}/videos?fields=id,title,thumbnail_240_url,duration&limit=6`);
+                        const listData = await listRes.json();
+
+                        if (listData && listData.list) {
+                            const gridContainer = document.getElementById('modal-grid-items');
+                            gridContainer.innerHTML = '';
+
+                            listData.list.forEach(item => {
+                                const mins = Math.floor(item.duration / 60);
+                                const secs = String(item.duration % 60).padStart(2, '0');
+
+                                const element = document.createElement('a');
+                                element.className = 'endscreen-card';
+                                element.href = `/download?id_or_url=${item.id}`;
+                                element.innerHTML = `
+                                    <div class="endscreen-thumb-container">
+                                        <img src="${item.thumbnail_240_url}">
+                                        <div class="endscreen-duration">${mins}:${secs}</div>
+                                    </div>
+                                    <div class="endscreen-meta">
+                                        <div class="endscreen-v-title">${item.title}</div>
+                                        <div class="endscreen-v-creator">${screenName}</div>
+                                    </div>
+                                `;
+                                element.addEventListener('click', function() {
+                                    document.getElementById('page-interstitial-screen').style.display = 'flex';
+                                });
+                                gridContainer.appendChild(element);
+                            });
+                            hasLoadedCreatorVideos = true;
+                        }
+                    }
+                } catch (err) {
+                    console.error("Popup engine request lifecycle exception:", err);
+                    document.getElementById('modal-grid-items').innerHTML = '<div style="color:var(--text-secondary);grid-column:1/-1;text-align:center;padding:20px;">Could not fetch profile channel records.</div>';
+                }
+            }
+
+            function dismissCreatorModal() {
+                modalOverlay.classList.remove('active');
+                setTimeout(() => { modalOverlay.style.display = 'none'; }, 300);
+            }
+
+            creatorTrigger.addEventListener('click', presentCreatorModal);
+            modalClose.addEventListener('click', dismissCreatorModal);
+            modalOverlay.addEventListener('click', function(e) { if (e.target === modalOverlay) dismissCreatorModal(); });
+        });
+    </script>
+</body>
+</html>
 """
 
 @app.route('/')
@@ -852,7 +960,6 @@ def render_player():
                 return "Extraction failed.", 500
                 
             formats = info.get('formats', [])
-            
             hls_streams = [f for f in formats if 'm3u8' in str(f.get('url','')) or 'hls' in str(f.get('format_id','')).lower()]
             
             if hls_streams:
@@ -940,6 +1047,25 @@ def proxy_ts_segment():
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     
+    # ⏱️ SERVER-SIDE THROTTLE LOGIC ENGINE
+    client_ip = request.remote_addr
+    now = time.time()
+    
+    if client_ip not in CLIENT_BUFFER_TRACKER:
+        CLIENT_BUFFER_TRACKER[client_ip] = {"count": 1, "last_request": now}
+    else:
+        session = CLIENT_BUFFER_TRACKER[client_ip]
+        if now - session["last_request"] > 15:
+            session["count"] = 1
+        else:
+            session["count"] += 1
+        session["last_request"] = now
+
+        # If the browser tries to download ahead past the initial 4 segments, slow it down
+        if session["count"] > 4:
+            delay_factor = 1.25 if priority == "high" else 1.5
+            time.sleep(delay_factor)
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
         'Accept': '*/*',
@@ -949,7 +1075,6 @@ def proxy_ts_segment():
     
     try:
         req = http_pool.get(raw_ts_url, headers=headers, stream=True, timeout=timeout_val)
-        
         content_type = req.headers.get('Content-Type')
         if not content_type or content_type == 'text/plain':
             if '.mp4' in raw_ts_url or '/fmp4/' in raw_ts_url:
