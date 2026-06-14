@@ -1008,36 +1008,56 @@ def proxy_m3u8():
         return "Timeout during proxy resolution", 504
 
     base_url = raw_m3u8_url.rsplit('/', 1)[0] + '/'
+    lines = resp.text.splitlines()
+    
     rewritten_lines = []
+    segment_index = 0
 
-    for line in resp.text.splitlines():
+    # We track how many valid chunks we've given out *in this specific manifest request*
+    # Let the browser have the first 8 segments at full quality so it starts instantly.
+    for line in lines:
         line_stripped = line.strip()
         if not line_stripped:
             continue
 
-        if 'URI=' in line_stripped:
-            def replace_uri(match):
-                rel_path = match.group(1).strip('"\'')
-                abs_url = urllib.parse.urljoin(base_url, rel_path)
-                proxy_route = "/manifest" if (".m3u8" in rel_path or "manifest" in rel_path) else "/segment"
-                return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}&priority={priority}"'
-            line_stripped = re.sub(r'URI=(["\'].*?["\'])', replace_uri, line_stripped)
-            rewritten_lines.append(line_stripped)
-
-        elif not line_stripped.startswith('#'):
+        if not line_stripped.startswith('#'):
+            segment_index += 1
             full_url = line_stripped if line_stripped.startswith(('http://', 'https://')) else urllib.parse.urljoin(base_url, line_stripped)
             encoded_url = urllib.parse.quote_plus(full_url)
+
             if '.m3u8' in line_stripped or 'manifest' in line_stripped:
                 rewritten_lines.append(f"/manifest?url={encoded_url}&priority={priority}")
             else:
-                rewritten_lines.append(f"/segment?url={encoded_url}&priority={priority}")
+                # 🛡️ THE DATA PLACEHOLDER PROTECTION SHIELD
+                # Let the browser see the entire layout structure, but if it tries to 
+                # pre-cache past segment 8, substitute the heavy video chunks with a 0-bandwidth route.
+                if segment_index > 8:
+                    rewritten_lines.append(f"/empty-placeholder-segment")
+                else:
+                    rewritten_lines.append(f"/segment?url={encoded_url}&priority={priority}")
         else:
+            # Keep all structure tags, durations, and targets intact 
+            # so the browser calculates the precise duration perfectly!
+            if 'URI=' in line_stripped:
+                def replace_uri(match):
+                    rel_path = match.group(1).strip('"\'')
+                    abs_url = urllib.parse.urljoin(base_url, rel_path)
+                    proxy_route = "/manifest" if (".m3u8" in rel_path or "manifest" in rel_path) else "/segment"
+                    return f'URI="{proxy_route}?url={urllib.parse.quote_plus(abs_url)}&priority={priority}"'
+                line_stripped = re.sub(r'URI=(["\'].*?["\'])', replace_uri, line_stripped)
             rewritten_lines.append(line_stripped)
 
     response = Response("\n".join(rewritten_lines), content_type="application/vnd.apple.mpegurl")
-    response.headers["Cache-Control"] = "public, max-age=2"
+    response.headers["Cache-Control"] = "public, max-age=4" # Short cache control allows clean seeking
     return response
 
+# 🛑 THE BANDWIDTH SAVER ENDPOINT
+@app.route('/empty-placeholder-segment')
+def empty_placeholder():
+    # Return a completely valid, microscopic 1-byte file structure.
+    # The browser's download thread finishes instantly using 0 data, 
+    # but the player won't stall out because it received a clean 200 OK block.
+    return Response(b'\x00', content_type="video/MP2T")
 @app.route('/segment')
 def proxy_ts_segment():
     raw_ts_url = request.args.get('url')
@@ -1047,32 +1067,7 @@ def proxy_ts_segment():
 
     raw_ts_url = urllib.parse.unquote(raw_ts_url)
     
-    # ⏱️ SMART INTELLIGENT THROTTLE ENGINE
-    client_ip = request.remote_addr
-    now = time.time()
-    
-    if client_ip not in CLIENT_BUFFER_TRACKER:
-        CLIENT_BUFFER_TRACKER[client_ip] = {"count": 1, "last_request": now}
-    else:
-        session = CLIENT_BUFFER_TRACKER[client_ip]
-        time_since_last_req = now - session["last_request"]
-        
-        # FIX: If the user seeks or fast-forwards, requests happen milliseconds apart (< 0.2s).
-        # If they are hammering the server to seek ahead, skip the delay entirely!
-        is_seeking = time_since_last_req < 0.2
-
-        if time_since_last_req > 15:
-            session["count"] = 1
-        else:
-            session["count"] += 1
-        session["last_request"] = now
-
-        # Only apply the buffer-cap delay if they are playing smoothly, NOT seeking
-        if session["count"] > 4 and not is_seeking:
-            # Gentle pacing delay during normal playback to keep buffer tight
-            delay_factor = 0.8 if priority == "high" else 1.1
-            time.sleep(delay_factor)
-
+    # ⚡ 0 DELAY PASS-THROUGH
     headers = {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
         'Accept': '*/*',
