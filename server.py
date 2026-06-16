@@ -27,6 +27,19 @@ app.url_map.strict_slashes = False
 CACHE = {
     "access_token": None
 }
+import os
+import threading
+import time
+
+def update_ytdlp_loop():
+    while True:
+        print("Updating yt-dlp...")
+        os.system("python -m pip install --upgrade yt-dlp")
+        # 18000 seconds = exactly 5 hours
+        time.sleep(18000)
+
+# This starts the 5-hour timer in the background as soon as Flask boots up
+threading.Thread(target=update_ytdlp_loop, daemon=True).start()
 
 
 def get_dailymotion_token():
