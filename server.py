@@ -1138,6 +1138,374 @@ def proxy_ts_segment():
         return response
     except Exception:
         return "Segment connection dropped", 502
+AUDIO_PROVIDER_URL = "https://ishaan2-nebulaview-stream.hf.space/download-song-mp3"
+
+LRCLIB_BASE = "https://lrclib.net/api"
+REQUEST_TIMEOUT = 25
+
+logging.basicConfig(level=logging.INFO)
+
+session = requests.Session()
+session.headers.update({
+    "User-Agent": "NebulaView/1.0 (music player)"
+})
+
+
+# --------------------------------------------------
+# HELPERS
+# --------------------------------------------------
+
+def clean_text(value, max_length=200):
+    if not isinstance(value, str):
+        return ""
+
+    value = re.sub(r"\s+", " ", value).strip()
+    return value[:max_length]
+
+
+def error_response(message, status=400, **extra):
+    payload = {
+        "success": False,
+        "error": message
+    }
+    payload.update(extra)
+    return jsonify(payload), status
+
+
+def make_audio_url(song, artist):
+    """Construct the configured provider URL."""
+    params = urlencode({
+        "song": song,
+        "artist": artist
+    })
+    return f"{AUDIO_PROVIDER_URL}?{params}"
+
+
+def lyrics_result(song, artist):
+    """
+    Fetch lyrics metadata from LRCLIB.
+
+    Returns a dictionary even when LRCLIB is unavailable,
+    so the audio result can still be returned.
+    """
+    try:
+        response = session.get(
+            f"{LRCLIB_BASE}/search",
+            params={
+                "track_name": song,
+                "artist_name": artist
+            },
+            timeout=REQUEST_TIMEOUT
+        )
+
+        response.raise_for_status()
+        data = response.json()
+
+        if not isinstance(data, list):
+            raise ValueError("LRCLIB returned an unexpected response")
+
+        if not data:
+            return {
+                "success": True,
+                "found": False,
+                "lyrics": None,
+                "synced": False,
+                "synced_lyrics": None
+            }
+
+        # Prefer a result containing synchronized lyrics.
+        result = next(
+            (
+                item for item in data
+                if item.get("syncedLyrics")
+            ),
+            None
+        )
+
+        # Fall back to plain lyrics if necessary.
+        if result is None:
+            result = next(
+                (
+                    item for item in data
+                    if item.get("plainLyrics")
+                ),
+                data[0]
+            )
+
+        plain = result.get("plainLyrics")
+        synced = result.get("syncedLyrics")
+
+        return {
+            "success": True,
+            "found": bool(plain or synced),
+            "title": result.get("trackName", song),
+            "artist": result.get("artistName", artist),
+            "album": result.get("albumName"),
+            "duration": result.get("duration"),
+            "lyrics": plain,
+            "synced": bool(synced),
+            "synced_lyrics": synced,
+            "has_word_sync": bool(result.get("hasWordSync", False))
+        }
+
+    except requests.Timeout:
+        app.logger.warning("LRCLIB request timed out")
+        return {
+            "success": False,
+            "found": False,
+            "lyrics": None,
+            "synced": False,
+            "synced_lyrics": None,
+            "error": "Lyrics request timed out"
+        }
+
+    except requests.RequestException:
+        app.logger.exception("LRCLIB HTTP request failed")
+        return {
+            "success": False,
+            "found": False,
+            "lyrics": None,
+            "synced": False,
+            "synced_lyrics": None,
+            "error": "Lyrics provider request failed"
+        }
+
+    except (ValueError, TypeError):
+        app.logger.exception("Invalid LRCLIB response")
+        return {
+            "success": False,
+            "found": False,
+            "lyrics": None,
+            "synced": False,
+            "synced_lyrics": None,
+            "error": "Invalid lyrics response"
+        }
+
+
+def validate_song_request():
+    song = clean_text(request.args.get("song"))
+    artist = clean_text(request.args.get("artist"))
+
+    if not song:
+        return None, None, error_response(
+            "Missing song parameter"
+        )
+
+    if not artist:
+        return None, None, error_response(
+            "Missing artist parameter"
+        )
+
+    return song, artist, None
+
+
+# --------------------------------------------------
+# HOME
+# --------------------------------------------------
+
+@app.get("/")
+def home():
+    return jsonify({
+        "name": "NebulaView Music API",
+        "version": "2.0",
+        "endpoints": {
+            "health": "/api/health",
+            "search": "/api/search?q=Blinding%20Lights&artist=The%20Weeknd",
+            "track": "/api/track?song=Blinding%20Lights&artist=The%20Weeknd",
+            "song": "/api/song?song=Blinding%20Lights&artist=The%20Weeknd",
+            "lyrics": "/api/lyrics?song=Blinding%20Lights&artist=The%20Weeknd",
+            "synced_lyrics": "/api/lyrics/synced?song=Blinding%20Lights&artist=The%20Weeknd"
+        }
+    })
+
+
+# --------------------------------------------------
+# HEALTH CHECK
+# --------------------------------------------------
+
+@app.get("/api/health")
+def health():
+    return jsonify({
+        "success": True,
+        "service": "NebulaView",
+        "audio_provider_configured": bool(AUDIO_PROVIDER_URL),
+        "lyrics_provider": "LRCLIB"
+    })
+
+
+# --------------------------------------------------
+# TRACK
+# --------------------------------------------------
+
+@app.get("/api/track")
+def track():
+    song, artist, error = validate_song_request()
+
+    if error:
+        return error
+
+    return jsonify({
+        "success": True,
+        "track": {
+            "title": song,
+            "artist": artist,
+            "audio_url": make_audio_url(song, artist),
+            "lyrics_url": (
+                f"/api/lyrics?{urlencode({'song': song, 'artist': artist})}"
+            ),
+            "synced_lyrics_url": (
+                f"/api/lyrics/synced?"
+                f"{urlencode({'song': song, 'artist': artist})}"
+            )
+        }
+    })
+
+
+# --------------------------------------------------
+# DO-ALL SONG ROUTE
+# --------------------------------------------------
+
+@app.get("/api/song")
+def song():
+    """
+    Return audio URL, track metadata, and lyrics together.
+
+    The audio provider may take time to prepare the MP3.
+    This route returns its URL rather than waiting for or
+    proxying the complete audio download.
+    """
+    title, artist, error = validate_song_request()
+
+    if error:
+        return error
+
+    audio_url = make_audio_url(title, artist)
+    lyrics_data = lyrics_result(title, artist)
+
+    return jsonify({
+        "success": True,
+        "track": {
+            "title": title,
+            "artist": artist,
+            "audio_url": audio_url
+        },
+        "lyrics": lyrics_data,
+        "playback": {
+            "type": "provider_url",
+            "note": (
+                "Request the audio URL with a client that supports "
+                "the provider's response and download time."
+            )
+        }
+    })
+
+
+# --------------------------------------------------
+# PLAIN LYRICS
+# --------------------------------------------------
+
+@app.get("/api/lyrics")
+def lyrics():
+    song_title, artist, error = validate_song_request()
+
+    if error:
+        return error
+
+    data = lyrics_result(song_title, artist)
+
+    status = 200 if data.get("success") else 502
+    return jsonify(data), status
+
+
+# --------------------------------------------------
+# SYNCED LYRICS
+# --------------------------------------------------
+
+@app.get("/api/lyrics/synced")
+def synced_lyrics():
+    song_title, artist, error = validate_song_request()
+
+    if error:
+        return error
+
+    data = lyrics_result(song_title, artist)
+
+    if not data.get("success"):
+        return jsonify(data), 502
+
+    return jsonify({
+        "success": True,
+        "found": data.get("found", False),
+        "title": data.get("title", song_title),
+        "artist": data.get("artist", artist),
+        "duration": data.get("duration"),
+        "synced": data.get("synced", False),
+        "synced_lyrics": data.get("synced_lyrics"),
+        "has_word_sync": data.get("has_word_sync", False)
+    })
+
+
+# --------------------------------------------------
+# SEARCH
+# --------------------------------------------------
+
+@app.get("/api/search")
+def search():
+    title = clean_text(request.args.get("q"))
+    artist = clean_text(request.args.get("artist"))
+
+    if not title:
+        return error_response(
+            "Provide a song title using q"
+        )
+
+    if not artist:
+        return jsonify({
+            "success": True,
+            "query": title,
+            "results": [],
+            "message": (
+                "Provide the artist parameter to create a track request."
+            )
+        })
+
+    params = urlencode({
+        "song": title,
+        "artist": artist
+    })
+
+    return jsonify({
+        "success": True,
+        "query": title,
+        "results": [{
+            "title": title,
+            "artist": artist,
+            "track_url": f"/api/track?{params}",
+            "song_url": f"/api/song?{params}"
+        }]
+    })
+
+
+# --------------------------------------------------
+# ERROR HANDLERS
+# --------------------------------------------------
+
+@app.errorhandler(404)
+def not_found(_error):
+    return jsonify({
+        "success": False,
+        "error": "Endpoint not found"
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_error(_error):
+    app.logger.exception("Unhandled server error")
+
+    return jsonify({
+        "success": False,
+        "error": "Internal server error"
+    }), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
