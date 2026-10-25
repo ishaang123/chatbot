@@ -8,7 +8,7 @@ import requests
 from flask import Flask, request, Response, render_template_string, jsonify
 import yt_dlp
 from yt_dlp.networking.impersonate import ImpersonateTarget
-
+import logging
 app = Flask(__name__)
 
 # Highly optimized connection pool for immediate data passthrough
