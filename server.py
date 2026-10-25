@@ -1489,6 +1489,236 @@ def search():
 # --------------------------------------------------
 # ERROR HANDLERS
 # --------------------------------------------------
+import re
+import requests
+
+from flask import request, jsonify, Response, stream_with_context
+from urllib.parse import urlencode
+MUSIC_TIMEOUT = 500
+
+import re
+import requests
+
+from flask import request, jsonify, Response, stream_with_context
+from urllib.parse import urlencode
+
+LRCLIB_BASE = "https://lrclib.net/api"
+AUDIO_PROVIDER_URL = (
+    "https://ishaan2-nebulaview-stream.hf.space/download-song-mp3"
+)
+
+MUSIC_TIMEOUT = 30
+MUSIC_USER_AGENT = "NebulaView/1.0"
+
+
+def validate_music_input():
+    song = request.args.get("song", "").strip()
+    artist = request.args.get("artist", "").strip()
+
+    if not song or not artist:
+        return None, None, (
+            jsonify({
+                "success": False,
+                "error": "Provide both song and artist."
+            }),
+            400,
+        )
+
+    if len(song) > 200 or len(artist) > 200:
+        return None, None, (
+            jsonify({
+                "success": False,
+                "error": "Song and artist must be 200 characters or fewer."
+            }),
+            400,
+        )
+
+    return song, artist, None
+
+
+def get_synced_lyrics(song, artist):
+    response = requests.get(
+        f"{LRCLIB_BASE}/search",
+        params={
+            "track_name": song,
+            "artist_name": artist,
+        },
+        headers={"User-Agent": MUSIC_USER_AGENT},
+        timeout=MUSIC_TIMEOUT,
+    )
+    response.raise_for_status()
+
+    results = response.json()
+    if not isinstance(results, list):
+        raise ValueError("Invalid lyrics response.")
+
+    for track in results:
+        synced = track.get("syncedLyrics")
+        if synced:
+            return {
+                "synced": True,
+                "lyrics": synced,
+                "title": track.get("trackName", song),
+                "artist": track.get("artistName", artist),
+                "duration": track.get("duration"),
+            }
+
+    return {
+        "synced": False,
+        "lyrics": None,
+        "title": song,
+        "artist": artist,
+        "duration": None,
+    }
+
+
+@app.get("/api/master")
+def master_music_route():
+    song, artist, error = validate_music_input()
+    if error:
+        return error
+
+    try:
+        lyrics_data = get_synced_lyrics(song, artist)
+
+        params = urlencode({
+            "song": song,
+            "artist": artist,
+        })
+
+        base_url = request.url_root.rstrip("/")
+
+        return jsonify({
+            "success": True,
+            "song": song,
+            "artist": artist,
+            "audio_url": f"{base_url}/api/master/audio?{params}",
+            "lyrics_url": f"{base_url}/api/master/lyrics?{params}",
+            "lyrics_synced": lyrics_data["synced"],
+            "duration": lyrics_data["duration"],
+            "message": (
+                "Audio and lyrics are available separately."
+                if lyrics_data["synced"]
+                else "Audio is available; synced lyrics were not found."
+            ),
+        })
+
+    except requests.Timeout:
+        return jsonify({
+            "success": False,
+            "error": "The lyrics service timed out."
+        }), 504
+
+    except (requests.RequestException, ValueError):
+        app.logger.exception("Master route lookup failed")
+        return jsonify({
+            "success": False,
+            "error": "Could not look up this song right now."
+        }), 502
+
+
+@app.get("/api/master/lyrics")
+def master_music_lyrics():
+    song, artist, error = validate_music_input()
+    if error:
+        return error
+
+    try:
+        data = get_synced_lyrics(song, artist)
+
+        if not data["synced"]:
+            return jsonify({
+                "success": False,
+                "synced": False,
+                "error": "Synced lyrics were not found for this song."
+            }), 404
+
+        return jsonify({
+            "success": True,
+            **data,
+        })
+
+    except requests.Timeout:
+        return jsonify({
+            "success": False,
+            "error": "The lyrics service timed out."
+        }), 504
+
+    except (requests.RequestException, ValueError):
+        app.logger.exception("Lyrics lookup failed")
+        return jsonify({
+            "success": False,
+            "error": "Could not retrieve lyrics."
+        }), 502
+
+
+@app.get("/api/master/audio")
+def master_music_audio():
+    song, artist, error = validate_music_input()
+    if error:
+        return error
+
+    try:
+        upstream = requests.get(
+            AUDIO_PROVIDER_URL,
+            params={"song": song, "artist": artist},
+            headers={"User-Agent": MUSIC_USER_AGENT},
+            stream=True,
+            timeout=(10, MUSIC_TIMEOUT),
+        )
+
+        if upstream.status_code != 200:
+            upstream.close()
+            return jsonify({
+                "success": False,
+                "error": "The audio provider could not supply this track."
+            }), 502
+
+        content_type = upstream.headers.get(
+            "Content-Type", ""
+        ).lower()
+
+        if (
+            "audio/" not in content_type
+            and "octet-stream" not in content_type
+        ):
+            upstream.close()
+            return jsonify({
+                "success": False,
+                "error": "The audio provider did not return an audio stream.",
+                "content_type": content_type,
+            }), 502
+
+        def generate():
+            try:
+                for chunk in upstream.iter_content(chunk_size=4096):
+                    if chunk:
+                        yield chunk
+            finally:
+                upstream.close()
+
+        return Response(
+            stream_with_context(generate()),
+            content_type=content_type,
+            headers={
+                "Content-Disposition": 'inline; filename="track.mp3"',
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    except requests.Timeout:
+        return jsonify({
+            "success": False,
+            "error": "The audio provider timed out."
+        }), 504
+
+    except requests.RequestException:
+        app.logger.exception("Audio provider request failed")
+        return jsonify({
+            "success": False,
+            "error": "Could not retrieve audio."
+        }), 502
 
 @app.errorhandler(404)
 def not_found(_error):
